@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中国象棋 - XiangQi</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <div id="app">
+    <!-- 开场动画 -->
+    <div id="intro-screen" class="intro-screen">
+      <div class="intro-content">
+        <div class="intro-piece">帅</div>
+        <h1 class="intro-title">中国象棋</h1>
+        <p class="intro-subtitle">Chinese Chess</p>
+      </div>
+    </div>
+
+    <!-- 主菜单 -->
+    <div id="main-menu" class="screen active">
+      <h1>中国象棋</h1>
+      <div class="menu-buttons">
+        <button id="btn-local-pvp" class="btn-primary">本地双人对战</button>
+        <button id="btn-local-ai" class="btn-primary">人机对战</button>
+        <div id="handicap-select" class="difficulty-bar">
+          <span>让子：</span>
+          <button class="handicap-btn active" data-handicap="none">不让</button>
+          <button class="handicap-btn" data-handicap="horse">让马</button>
+          <button class="handicap-btn" data-handicap="cannon">让炮</button>
+          <button class="handicap-btn" data-handicap="rook">让车</button>
+        </div>
+        <button id="btn-puzzles" class="btn-primary">残局挑战</button>
+        <button id="btn-ai-vs-ai" class="btn-primary">AI观战</button>
+        <div id="difficulty-select" class="difficulty-bar">
+          <span>难度：</span>
+          <button class="diff-btn active" data-diff="easy">简单</button>
+          <button class="diff-btn" data-diff="normal">普通</button>
+          <button class="diff-btn" data-diff="hard">困难</button>
+        </div>
+        <button id="btn-lan-host" class="btn-primary">局域网联机 - 创建房间</button>
+        <button id="btn-lan-join" class="btn-primary">局域网联机 - 加入房间</button>
+        <button id="btn-history" class="btn-secondary">历史对局</button>
+        <button id="btn-rules" class="btn-secondary">规则说明</button>
+      </div>
+    </div>
+
+    <!-- 游戏界面 -->
+    <div id="game-screen" class="screen">
+      <div class="game-header">
+        <button id="btn-back" class="btn-small">返回菜单</button>
+        <div id="game-info">
+          <span id="turn-indicator">红方回合</span>
+          <span id="step-counter">0步</span>
+          <span id="game-status"></span>
+        </div>
+        <div id="eval-bar" class="eval-bar hidden">
+          <div class="eval-fill" id="eval-fill"></div>
+          <span id="eval-text" class="eval-text">0</span>
+        </div>
+        <div class="timers">
+          <div id="timer-red" class="timer">10:00</div>
+          <div id="timer-black" class="timer">10:00</div>
+        </div>
+        <div id="ai-control" class="ai-control hidden">
+          <button id="btn-ai-pause" class="btn-small">暂停</button>
+          <input type="range" id="ai-speed" min="200" max="3000" value="800" step="100">
+          <span id="ai-speed-label">0.8s</span>
+        </div>
+        <div class="header-actions">
+          <button id="btn-hint" class="btn-small">提示</button>
+          <button id="btn-draw" class="btn-small">求和</button>
+          <button id="btn-resign" class="btn-small">认输</button>
+          <button id="btn-restart" class="btn-small">重开</button>
+          <button id="btn-undo" class="btn-small">悔棋</button>
+        </div>
+      </div>
+      <div class="game-container">
+        <div class="board-wrapper">
+          <canvas id="board-canvas" width="540" height="600"></canvas>
+          <div id="waiting-overlay" class="waiting-overlay hidden">
+            <span>等待对方走棋...</span>
+          </div>
+          <div id="review-overlay" class="waiting-overlay hidden">
+            <span>查看历史局面</span>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button id="btn-review-prev" class="btn-small">◀ 上一步</button>
+              <button id="btn-return-game" class="btn-primary">返回对局</button>
+              <button id="btn-review-next" class="btn-small">下一步 ▶</button>
+            </div>
+          </div>
+        </div>
+        <div class="side-panel">
+          <div class="panel-section">
+            <div class="panel-header">
+              <h3>棋谱</h3>
+              <div>
+                <button id="btn-import-fen" class="btn-small">导入</button>
+                <button id="btn-copy-fen" class="btn-small">复制FEN</button>
+                <button id="btn-screenshot" class="btn-small">截图</button>
+                <button id="btn-share" class="btn-small">分享</button>
+                <button id="btn-export" class="btn-small">导出</button>
+              </div>
+            </div>
+            <div id="notation-list" class="notation-scroll"></div>
+          </div>
+          <div class="panel-section">
+            <h3>黑方被吃</h3>
+            <div id="captured-black" class="captured-list"></div>
+          </div>
+          <div class="panel-section">
+            <h3>红方被吃</h3>
+            <div id="captured-red" class="captured-list"></div>
+          </div>
+          <div id="chat-panel" class="panel-section chat-panel hidden">
+            <h3>聊天</h3>
+            <div id="chat-messages" class="chat-scroll"></div>
+            <div class="chat-input-row">
+              <input type="text" id="chat-input" placeholder="输入消息..." maxlength="50">
+              <button id="btn-send-chat" class="btn-small">发送</button>
+            </div>
+          </div>
+          <div class="panel-section settings">
+            <label class="toggle-label">
+              <input type="checkbox" id="sound-toggle" checked>
+              <span>音效</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="flip-toggle">
+              <span>翻转棋盘</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="coords-toggle">
+              <span>坐标</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="eval-toggle">
+              <span>局面评估</span>
+            </label>
+            <div class="theme-bar">
+              <span>主题：</span>
+              <button class="theme-btn active" data-theme="0">经典</button>
+              <button class="theme-btn" data-theme="1">深色</button>
+              <button class="theme-btn" data-theme="2">青花</button>
+              <button class="theme-btn" data-theme="3">水墨</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 联机房间界面 -->
+    <div id="lan-screen" class="screen">
+      <div class="lan-panel">
+        <button id="btn-lan-back" class="btn-small">返回</button>
+        <h2 id="lan-title">创建房间</h2>
+        <div id="lan-host-panel" class="lan-subpanel">
+          <p>您的连接码：</p>
+          <div class="code-box">
+            <textarea id="host-offer" readonly placeholder="正在生成..."></textarea>
+            <button id="btn-copy-offer" class="btn-small">复制</button>
+          </div>
+          <p>请让对方把应答码粘贴到这里：</p>
+          <textarea id="host-answer" placeholder="粘贴对方的应答码..."></textarea>
+          <button id="btn-connect-host" class="btn-primary">连接</button>
+        </div>
+        <div id="lan-join-panel" class="lan-subpanel hidden">
+          <p>请输入对方的连接码：</p>
+          <textarea id="join-offer" placeholder="粘贴对方的连接码..."></textarea>
+          <button id="btn-get-answer" class="btn-primary">获取应答码</button>
+          <p>您的应答码（发给对方）：</p>
+          <div class="code-box">
+            <textarea id="join-answer" readonly></textarea>
+            <button id="btn-copy-answer" class="btn-small">复制</button>
+          </div>
+        </div>
+        <div id="lan-status"></div>
+      </div>
+    </div>
+
+    <!-- 残局挑战 -->
+    <div id="puzzle-screen" class="screen">
+      <div class="rules-panel">
+        <button id="btn-puzzle-back" class="btn-small">返回</button>
+        <h2>残局挑战</h2>
+        <div id="puzzle-list" class="history-list"></div>
+      </div>
+    </div>
+
+    <!-- 历史对局 -->
+    <div id="history-screen" class="screen">
+      <div class="rules-panel">
+        <div class="panel-header">
+          <button id="btn-history-back" class="btn-small">返回</button>
+          <h2>历史对局</h2>
+          <button id="btn-clear-history" class="btn-small">清空</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
+    </div>
+
+    <!-- 规则说明 -->
+    <div id="rules-screen" class="screen">
+      <div class="rules-panel">
+        <button id="btn-rules-back" class="btn-small">返回</button>
+        <h2>中国象棋规则</h2>
+        <div class="rules-content">
+          <h3>基本规则</h3>
+          <ul>
+            <li>红方先行，双方轮流走子</li>
+            <li>将死对方将/帅即为胜利</li>
+            <li>被困毙（无合法移动）也算负</li>
+          </ul>
+          <h3>棋子走法</h3>
+          <ul>
+            <li><strong>帅/将</strong>：九宫格内，横竖一步</li>
+            <li><strong>士/仕</strong>：斜向一步，不出九宫</li>
+            <li><strong>象/相</strong>：田字格对角，不能过河，塞象眼不能走</li>
+            <li><strong>马</strong>：日字，蹩马腿不能走</li>
+            <li><strong>车</strong>：横竖直线，不限格数</li>
+            <li><strong>炮</strong>：直走同车，吃子需隔一个子</li>
+            <li><strong>兵/卒</strong>：过河前只能前进，过河后可横走，均只能一步</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- 游戏结束弹窗 -->
+    <div id="game-over-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2 id="modal-title">游戏结束</h2>
+        <p id="modal-message"></p>
+        <div class="modal-actions">
+          <button id="btn-modal-restart" class="btn-primary">再来一局</button>
+          <button id="btn-modal-menu" class="btn-secondary">返回菜单</button>
+        </div>
+      </div>
+    </div>
+
+  <script type="module" src="dist/main.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>

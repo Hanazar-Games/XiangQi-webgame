@@ -1,0 +1,72 @@
+import { Board } from './board.js';
+import { Piece, Position, Side, Move } from './types.js';
+import { Rules } from './rules.js';
+import { OpeningBook } from './openings.js';
+import { Engine, SearchResult } from './engine.js';
+
+export type Difficulty = 'easy' | 'normal' | 'hard';
+
+export class AI {
+  private side: Side;
+  private openingBook = new OpeningBook();
+  private engine: Engine;
+
+  constructor(side: Side, difficulty: Difficulty = 'normal') {
+    this.side = side;
+    this.engine = new Engine(side);
+
+    if (difficulty === 'easy') {
+      this.engine.setTimeLimit(500);
+    } else if (difficulty === 'normal') {
+      this.engine.setTimeLimit(2000);
+    } else {
+      this.engine.setTimeLimit(6000);
+    }
+  }
+
+  getMove(board: Board): { move: Move | null; info: SearchResult | null } {
+    const moves = this.getAllLegalMoves(board);
+    if (moves.length === 0) return { move: null, info: null };
+
+    // 计算黑方已走步数
+    const blackMoveCount = board.state.moveHistory.filter(m => m.piece.side === 'black').length;
+
+    // 开局阶段使用开局库
+    if (blackMoveCount < 3) {
+      const openingMove = this.openingBook.getMove(board.state.board, blackMoveCount);
+      if (openingMove) return { move: openingMove, info: null };
+    }
+
+    // 使用搜索引擎
+    const result = this.engine.search(board.state.board, 5);
+
+    return { move: result.move, info: result };
+  }
+
+  private getAllLegalMoves(board: Board): Move[] {
+    const moves: Move[] = [];
+    const state = board.state;
+
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 9; x++) {
+        const piece = state.board[y][x];
+        if (piece && piece.side === this.side) {
+          for (let ty = 0; ty < 10; ty++) {
+            for (let tx = 0; tx < 9; tx++) {
+              const from = { x, y };
+              const to = { x: tx, y: ty };
+              if (Rules.isValidMove(state.board, from, to)) {
+                if (!Rules.wouldBeInCheck(state.board, from, to, this.side)) {
+                  const captured = state.board[ty][tx] || undefined;
+                  moves.push({ from, to, piece, captured });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return moves;
+  }
+}
