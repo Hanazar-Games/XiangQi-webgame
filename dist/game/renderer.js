@@ -31,7 +31,7 @@ export class Renderer {
         this.showCoords = v;
     }
     setTheme(theme) {
-        this.theme = theme;
+        this.theme = { ...CLASSIC_THEME, ...theme };
     }
     // 将棋盘坐标转换为canvas坐标
     toCanvas(pos) {
@@ -59,7 +59,7 @@ export class Renderer {
         return null;
     }
     render(state, selectedPos, validMoves, animator, hintMove) {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clearRect(0, 0, 540, 600);
         this.drawBoard();
         this.drawMarkers();
         if (selectedPos) {
@@ -79,8 +79,10 @@ export class Renderer {
             const kingPos = this.findKing(state);
             if (kingPos) {
                 const blink = 0.3 + 0.7 * Math.abs(Math.sin(performance.now() / 200));
-                const color = this.theme.highlight.check.replace(/[\d.]+\)$/, `${blink})`);
-                this.drawHighlight(kingPos, color);
+                this.ctx.save();
+                this.ctx.globalAlpha = blink;
+                this.drawHighlight(kingPos, this.theme.highlight.check);
+                this.ctx.restore();
             }
         }
         // AI提示走法
@@ -105,7 +107,7 @@ export class Renderer {
         // 绘制动画中的棋子
         if (anim) {
             const elapsed = performance.now() - anim.startTime;
-            const t = Math.min(1, elapsed / anim.duration);
+            const t = Math.min(1, elapsed / (anim.duration || 1));
             const ease = Animator.easeOut(t);
             const fromCanvas = this.toCanvas(anim.from);
             const toCanvas = this.toCanvas(anim.to);
@@ -120,7 +122,7 @@ export class Renderer {
         const height = cellSize * 9;
         // 背景
         ctx.fillStyle = this.theme.boardBg;
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillRect(0, 0, 540, 600);
         ctx.strokeStyle = this.theme.lineColor;
         ctx.lineWidth = 1.5;
         // 横线

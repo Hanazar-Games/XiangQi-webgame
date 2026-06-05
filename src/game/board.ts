@@ -120,14 +120,8 @@ export class Board {
     const enemySide = this.state.currentSide;
     this.state.check = Rules.isInCheck(this.state.board, enemySide);
 
-    // 60回合自然限着（120步不吃子判和）
-    if (this.state.noCaptureCount >= 120) {
-      this.state.gameOver = true;
-      this.state.winner = null;
-    }
-
-    // 检测胜负
-    if (!this.state.gameOver && !Rules.hasLegalMoves(this.state.board, enemySide)) {
+    // 检测胜负（先检查将杀/困毙，再检查60回合自然限着）
+    if (!Rules.hasLegalMoves(this.state.board, enemySide)) {
       this.state.gameOver = true;
       if (this.state.check) {
         // 将死
@@ -136,6 +130,10 @@ export class Board {
         // 困毙，被困毙方输
         this.state.winner = piece.side;
       }
+    } else if (this.state.noCaptureCount >= 120) {
+      // 60回合自然限着（120步不吃子判和）
+      this.state.gameOver = true;
+      this.state.winner = null;
     }
 
     this.onStateChange?.();
@@ -162,7 +160,15 @@ export class Board {
     this.state.currentSide = this.state.currentSide === 'red' ? 'black' : 'red';
     this.state.gameOver = false;
     this.state.winner = null;
+    // 重新计算连续不吃子计数
     this.state.noCaptureCount = 0;
+    for (const m of this.state.moveHistory) {
+      if (m.captured) {
+        this.state.noCaptureCount = 0;
+      } else {
+        this.state.noCaptureCount++;
+      }
+    }
     this.state.check = Rules.isInCheck(this.state.board, this.state.currentSide);
 
     this.onStateChange?.();
@@ -196,18 +202,16 @@ export class Board {
     const enemySide = this.state.currentSide;
     this.state.check = Rules.isInCheck(this.state.board, enemySide);
 
-    if (this.state.noCaptureCount >= 120) {
-      this.state.gameOver = true;
-      this.state.winner = null;
-    }
-
-    if (!this.state.gameOver && !Rules.hasLegalMoves(this.state.board, enemySide)) {
+    if (!Rules.hasLegalMoves(this.state.board, enemySide)) {
       this.state.gameOver = true;
       if (this.state.check) {
         this.state.winner = move.piece.side;
       } else {
         this.state.winner = move.piece.side;
       }
+    } else if (this.state.noCaptureCount >= 120) {
+      this.state.gameOver = true;
+      this.state.winner = null;
     }
 
     this.onStateChange?.();

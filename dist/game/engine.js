@@ -184,6 +184,7 @@ export class Engine {
         this.transpositionTable.clear();
         let bestMove = null;
         let bestScore = -Infinity;
+        let lastCompletedDepth = 0;
         // 迭代加深
         for (let depth = 1; depth <= maxDepth; depth++) {
             if (this.shouldStop())
@@ -191,6 +192,7 @@ export class Engine {
             const score = this.minimax(board, depth, -Infinity, Infinity, true);
             if (!this.stopSearch) {
                 bestScore = score;
+                lastCompletedDepth = depth;
                 // 从置换表获取最佳走法
                 const hash = this.zobrist.hash(board, this.side);
                 const entry = this.transpositionTable.get(hash);
@@ -200,7 +202,7 @@ export class Engine {
             }
         }
         const timeMs = performance.now() - this.startTime;
-        return { move: bestMove, score: bestScore, nodes: this.nodesSearched, depth: maxDepth, timeMs };
+        return { move: bestMove, score: bestScore, nodes: this.nodesSearched, depth: lastCompletedDepth, timeMs };
     }
     shouldStop() {
         if (this.stopSearch)
@@ -214,7 +216,7 @@ export class Engine {
     minimax(board, depth, alpha, beta, isMaximizing) {
         this.nodesSearched++;
         if (this.shouldStop())
-            return 0;
+            return isMaximizing ? alpha : beta;
         const side = isMaximizing ? this.side : (this.side === 'red' ? 'black' : 'red');
         const hash = this.zobrist.hash(board, side);
         // 置换表查询
@@ -227,9 +229,9 @@ export class Engine {
             if (ttEntry.flag === 'upper' && ttEntry.score <= alpha)
                 return ttEntry.score;
         }
-        // 叶子节点评估
+        // 叶子节点评估（静态搜索消除地平线效应）
         if (depth === 0) {
-            return this.evaluate(board);
+            return this.quiescence(board, alpha, beta, isMaximizing);
         }
         const moves = this.getAllLegalMoves(board, side);
         if (moves.length === 0) {
@@ -276,6 +278,9 @@ export class Engine {
             }
         }
         if (!this.stopSearch && bestMove) {
+            if (this.transpositionTable.size > 500000) {
+                this.transpositionTable.clear();
+            }
             this.transpositionTable.set(hash, { depth, score: bestScore, flag, bestMove });
         }
         return bestScore;
@@ -351,6 +356,42 @@ export class Engine {
         newBoard[move.to.y][move.to.x] = move.piece;
         newBoard[move.from.y][move.from.x] = null;
         return newBoard;
+    }
+    quiescence(board, alpha, beta, isMaximizing) {
+        const standPat = this.evaluate(board);
+        if (isMaximizing) {
+            if (standPat >= beta)
+                return beta;
+            if (standPat > alpha)
+                alpha = standPat;
+        }
+        else {
+            if (standPat <= alpha)
+                return alpha;
+            if (standPat < beta)
+                beta = standPat;
+        }
+        const side = isMaximizing ? this.side : (this.side === 'red' ? 'black' : 'red');
+        const moves = this.getAllLegalMoves(board, side).filter(m => m.captured);
+        for (const move of moves) {
+            if (this.shouldStop())
+                break;
+            const newBoard = this.simulateMove(board, move);
+            const score = this.quiescence(newBoard, alpha, beta, !isMaximizing);
+            if (isMaximizing) {
+                if (score >= beta)
+                    return beta;
+                if (score > alpha)
+                    alpha = score;
+            }
+            else {
+                if (score <= alpha)
+                    return alpha;
+                if (score < beta)
+                    beta = score;
+            }
+        }
+        return isMaximizing ? alpha : beta;
     }
     evaluate(board) {
         let score = 0;

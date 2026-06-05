@@ -48,6 +48,8 @@ class GameApp {
             game: document.getElementById('game-screen'),
             lan: document.getElementById('lan-screen'),
             rules: document.getElementById('rules-screen'),
+            puzzle: document.getElementById('puzzle-screen'),
+            history: document.getElementById('history-screen'),
         };
         this.notationEl = document.getElementById('notation-list');
         this.soundToggle = document.getElementById('sound-toggle');
@@ -119,6 +121,8 @@ class GameApp {
             if (e.key === 'Enter')
                 this.sendChat();
         });
+        document.getElementById('btn-draw').addEventListener('click', () => this.requestDraw());
+        document.getElementById('btn-resign').addEventListener('click', () => this.resign());
         document.getElementById('btn-modal-restart').addEventListener('click', () => {
             this.hideModal();
             this.restartGame();
@@ -469,6 +473,14 @@ class GameApp {
                 this.updateNotation();
                 this.playMoveSound(move);
             }
+            else if (!this.board.state.gameOver) {
+                // AI无合法移动：判负
+                this.board.state.gameOver = true;
+                this.board.state.winner = side === 'red' ? 'black' : 'red';
+                this.updateGameInfo();
+                this.renderBoard();
+                this.stopAiVsAi();
+            }
         }, speed);
     }
     toggleAiPause() {
@@ -497,6 +509,8 @@ class GameApp {
     }
     startGame(mode) {
         this.mode = mode;
+        this.currentPuzzleIndex = null;
+        this.hintMove = null;
         this.board.reset();
         this.notation.clear();
         this.selectedPos = null;
@@ -590,7 +604,9 @@ class GameApp {
         if (msg.type === 'move') {
             try {
                 const move = JSON.parse(msg.payload);
-                this.board.applyExternalMove(move);
+                const ok = this.board.applyExternalMove(move);
+                if (!ok)
+                    return;
                 this.notation.record(move);
                 this.selectedPos = null;
                 this.validMoves = [];
@@ -777,6 +793,11 @@ class GameApp {
         this.isThinking = true;
         this.updateGameInfo();
         setTimeout(() => {
+            if (!this.ai || this.board.state.gameOver) {
+                this.isThinking = false;
+                this.updateGameInfo();
+                return;
+            }
             const result = this.ai.getMove(this.board);
             const aiMove = result.move;
             if (aiMove) {
@@ -795,6 +816,8 @@ class GameApp {
     }
     undo() {
         if (this.mode?.startsWith('lan-'))
+            return;
+        if (this.isThinking)
             return;
         if (this.reviewIndex !== null)
             this.returnToGame();
@@ -1140,7 +1163,7 @@ class GameApp {
         if (this.board.state.gameOver)
             return;
         this.board.state.gameOver = true;
-        this.board.state.winner = this.mySide;
+        this.board.state.winner = this.mySide || null;
         this.gameOverShown = true;
         this.stopTimer();
         this.updateGameInfo();
@@ -1237,6 +1260,8 @@ class GameApp {
         }
     }
     async computeEvaluation() {
+        if (this.board.state.gameOver)
+            return;
         const evalFill = document.getElementById('eval-fill');
         const evalText = document.getElementById('eval-text');
         if (!evalFill || !evalText)

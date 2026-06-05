@@ -37,6 +37,23 @@ export class Rules {
     }
   }
 
+  private static kingsFaceEachOther(board: (Piece | null)[][], pos: Position, side: Side): boolean {
+    const enemySide: Side = side === 'red' ? 'black' : 'red';
+    for (let y = 0; y < 10; y++) {
+      const piece = board[y][pos.x];
+      if (piece && piece.type === 'king' && piece.side === enemySide) {
+        // 检查中间是否有子
+        const minY = Math.min(pos.y, y);
+        const maxY = Math.max(pos.y, y);
+        for (let yy = minY + 1; yy < maxY; yy++) {
+          if (board[yy][pos.x]) return false;
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
   private static isValidKingMove(
     board: (Piece | null)[][],
     from: Position,
@@ -70,6 +87,9 @@ export class Rules {
     } else {
       if (to.x < 3 || to.x > 5 || to.y < 0 || to.y > 2) return false;
     }
+
+    // 不能飞将
+    if (this.kingsFaceEachOther(board, to, side)) return false;
 
     return true;
   }
@@ -277,11 +297,13 @@ export class Rules {
     switch (piece.type) {
       case 'king': {
         if ((dx === 1 && dy === 0) || (dx === 0 && dy === 1)) {
-          if (piece.side === 'red') {
-            return to.x >= 3 && to.x <= 5 && to.y >= 7 && to.y <= 9;
-          } else {
-            return to.x >= 3 && to.x <= 5 && to.y >= 0 && to.y <= 2;
-          }
+          const inPalace = piece.side === 'red'
+            ? to.x >= 3 && to.x <= 5 && to.y >= 7 && to.y <= 9
+            : to.x >= 3 && to.x <= 5 && to.y >= 0 && to.y <= 2;
+          if (!inPalace) return false;
+          // 不能飞将
+          if (this.kingsFaceEachOther(board, to, piece.side)) return false;
+          return true;
         }
         if (dx === 0 && target && target.type === 'king') {
           const minY = Math.min(from.y, to.y);
