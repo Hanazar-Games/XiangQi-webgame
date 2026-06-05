@@ -27,7 +27,7 @@ const ALL = [
     },
     {
         name: '闷宫杀', description: '炮困九宫士象自堵', side: 'red', target: 'checkmate', category: '杀法', difficulty: 1,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][4] = R('cannon'); b[1][3] = R('horse'); b[0][4] = B('king'); b[1][5] = B('advisor'); b[2][6] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][4] = R('cannon'); b[1][3] = R('horse'); b[0][4] = B('king'); b[1][5] = B('advisor'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '大胆穿心', description: '弃车破士直捣黄龙', side: 'red', target: 'checkmate', category: '杀法', difficulty: 2,
@@ -43,7 +43,7 @@ const ALL = [
     },
     {
         name: '困毙', description: '限制将路不将军绝杀', side: 'red', target: 'checkmate', category: '杀法', difficulty: 2,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][4] = R('rook'); b[1][3] = R('horse'); b[0][4] = B('king'); b[1][5] = B('advisor'); b[2][3] = B('elephant'); b[2][5] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][4] = R('rook'); b[1][3] = R('horse'); b[0][4] = B('king'); b[1][5] = B('advisor'); b[0][2] = B('elephant'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '钓鱼马', description: '马在士角位将军', side: 'red', target: 'checkmate', category: '杀法', difficulty: 2,
@@ -67,7 +67,7 @@ const ALL = [
     },
     {
         name: '天地炮', description: '中炮底炮配合车杀', side: 'red', target: 'checkmate', category: '杀法', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[3][4] = R('cannon'); b[0][4] = R('cannon'); b[2][0] = R('rook'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[2][4] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[3][4] = R('cannon'); b[8][4] = R('cannon'); b[2][0] = R('rook'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[2][4] = B('elephant'); return b; })(),
     },
     {
         name: '夹车炮', description: '车炮夹攻将无处逃', side: 'red', target: 'checkmate', category: '杀法', difficulty: 3,
@@ -79,7 +79,7 @@ const ALL = [
     },
     {
         name: '三子归边', description: '三进攻子力集中一侧', side: 'red', target: 'checkmate', category: '杀法', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][0] = R('rook'); b[3][1] = R('horse'); b[1][0] = R('cannon'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[2][2] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][0] = R('rook'); b[3][1] = R('horse'); b[1][0] = R('cannon'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[0][2] = B('elephant'); return b; })(),
     },
     {
         name: '侧面虎', description: '马占将侧配合车绝杀', side: 'red', target: 'checkmate', category: '杀法', difficulty: 3,
@@ -96,7 +96,7 @@ const ALL = [
     },
     {
         name: '老卒搜山', description: '老兵 slowly推进取胜', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[1][4] = R('pawn'); b[0][0] = B('king'); b[1][3] = B('advisor'); b[2][4] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][4] = R('pawn'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[0][2] = B('elephant'); return b; })(),
     },
     {
         name: '千里照面', description: '远炮照面配合车斩杀', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
@@ -109,7 +109,7 @@ const ALL = [
     // ========== 和棋类 (26-30) ==========
     {
         name: '单马和士象全', description: '劣势方巧妙求和', side: 'black', target: 'checkmate', category: '和棋', difficulty: 2,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[8][1] = R('horse'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[2][2] = B('elephant'); b[2][6] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[8][1] = R('horse'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[0][2] = B('elephant'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '老兵搜山求和', description: '老兵对士象巧妙和棋', side: 'black', target: 'checkmate', category: '和棋', difficulty: 2,
@@ -125,7 +125,7 @@ const ALL = [
     },
     {
         name: '马双象和单车', description: '双象连环巧和单车', side: 'black', target: 'checkmate', category: '和棋', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[5][4] = R('rook'); b[0][4] = B('king'); b[2][2] = B('elephant'); b[2][6] = B('elephant'); b[1][4] = B('horse'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[5][4] = R('rook'); b[0][4] = B('king'); b[0][2] = B('elephant'); b[0][6] = B('elephant'); b[1][4] = B('horse'); return b; })(),
     },
     // ========== 扩展残局 (31-50) ==========
     {
@@ -142,7 +142,7 @@ const ALL = [
     },
     {
         name: '马炮胜士象全', description: '马炮巧胜士象全', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[4][3] = R('horse'); b[3][5] = R('cannon'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[2][2] = B('elephant'); b[2][6] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[4][3] = R('horse'); b[3][5] = R('cannon'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[0][2] = B('elephant'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '车马胜车双士', description: '车马对车双士的攻法', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
@@ -154,7 +154,7 @@ const ALL = [
     },
     {
         name: '双车胜车士象全', description: '双车攻车士象全', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][0] = R('rook'); b[2][8] = R('rook'); b[0][4] = B('king'); b[0][0] = B('rook'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[2][2] = B('elephant'); b[2][6] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[2][0] = R('rook'); b[2][8] = R('rook'); b[0][4] = B('king'); b[0][0] = B('rook'); b[1][3] = B('advisor'); b[1][5] = B('advisor'); b[0][2] = B('elephant'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '车马冷着 II', description: '车+马冷着攻击', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
@@ -186,7 +186,7 @@ const ALL = [
     },
     {
         name: '车马冷着 III', description: '车马冷着第三式', side: 'red', target: 'checkmate', category: '巧胜', difficulty: 3,
-        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[3][0] = R('rook'); b[4][3] = R('horse'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[2][6] = B('elephant'); return b; })(),
+        board: (() => { const b = emptyBoard(); b[9][4] = R('king'); b[3][0] = R('rook'); b[4][3] = R('horse'); b[0][4] = B('king'); b[1][3] = B('advisor'); b[0][6] = B('elephant'); return b; })(),
     },
     {
         name: '双马饮泉', description: '双马连环攻击', side: 'red', target: 'checkmate', category: '杀法', difficulty: 3,

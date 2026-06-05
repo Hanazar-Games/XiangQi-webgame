@@ -134,6 +134,8 @@ button {
 .settings {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .toggle-label {
@@ -774,7 +776,6 @@ body {
   z-index: 1000;
   animation: introFadeOut 0.8s ease forwards;
   animation-delay: 1.8s;
-  pointer-events: none;
 }
 
 .intro-content {

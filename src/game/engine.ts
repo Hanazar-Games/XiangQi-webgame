@@ -267,7 +267,7 @@ export class Engine {
 
     // 叶子节点评估（静态搜索消除地平线效应）
     if (depth === 0) {
-      return this.quiescence(board, alpha, beta, isMaximizing);
+      return this.quiescence(board, alpha, beta, isMaximizing, 0);
     }
 
     const moves = this.getAllLegalMoves(board, side);
@@ -408,7 +408,7 @@ export class Engine {
     return newBoard;
   }
 
-  private quiescence(board: (Piece | null)[][], alpha: number, beta: number, isMaximizing: boolean): number {
+  private quiescence(board: (Piece | null)[][], alpha: number, beta: number, isMaximizing: boolean, qDepth: number): number {
     const standPat = this.evaluate(board);
     if (isMaximizing) {
       if (standPat >= beta) return beta;
@@ -418,13 +418,15 @@ export class Engine {
       if (standPat < beta) beta = standPat;
     }
 
+    if (qDepth >= 8) return isMaximizing ? alpha : beta;
+
     const side = isMaximizing ? this.side : (this.side === 'red' ? 'black' : 'red');
     const moves = this.getAllLegalMoves(board, side).filter(m => m.captured);
 
     for (const move of moves) {
       if (this.shouldStop()) break;
       const newBoard = this.simulateMove(board, move);
-      const score = this.quiescence(newBoard, alpha, beta, !isMaximizing);
+      const score = this.quiescence(newBoard, alpha, beta, !isMaximizing, qDepth + 1);
       if (isMaximizing) {
         if (score >= beta) return beta;
         if (score > alpha) alpha = score;

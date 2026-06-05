@@ -12,6 +12,7 @@ import { ALL_THEMES } from './game/themes.js';
 import { MoveCodec } from './game/codec.js';
 import { FenCodec } from './game/fen.js';
 import { Position, Side, Move, PIECE_NAMES } from './game/types.js';
+import { Rules } from './game/rules.js';
 
 type GameMode = 'local-pvp' | 'local-ai' | 'lan-host' | 'lan-join' | 'ai-vs-ai';
 
@@ -36,6 +37,7 @@ class GameApp {
   private lastEvalScore = 0;
   private gameOverShown = false;
   private reviewIndex: number | null = null;
+  private isReplaying = false;
   private savedSettings = Storage.loadSettings();
   private timeRed = 600;
   private timeBlack = 600;
@@ -94,6 +96,19 @@ class GameApp {
       }
     });
 
+    // 主题选择
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+        const el = e.currentTarget as HTMLElement;
+        el.classList.add('active');
+        const themeIdx = parseInt(el.dataset.theme!, 10);
+        this.renderer.setTheme(ALL_THEMES[themeIdx]);
+        this.renderBoard();
+        this.saveSettings();
+      });
+    });
+
     // 难度选择
     document.querySelectorAll('.diff-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -149,8 +164,7 @@ class GameApp {
       this.hideModal();
       this.backToMenu();
     });
-    this.canvas.addEventListener('click', (e) => this.onPointerClick(e));
-    this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+    this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
 
     // 音效开关
     this.soundToggle.addEventListener('change', () => {
@@ -194,6 +208,15 @@ class GameApp {
 
     // 规则
     document.getElementById('btn-rules-back')!.addEventListener('click', () => this.backToMenu());
+
+    // 记谱列表事件委托（只绑定一次）
+    this.notationEl.addEventListener('click', (e) => {
+      const target = (e.target as HTMLElement).closest('[data-index]');
+      if (target) {
+        const idx = parseInt((target as HTMLElement).dataset.index!, 10);
+        this.jumpToMove(idx);
+      }
+    });
   }
 
   private checkResumeState(): void {
@@ -216,6 +239,9 @@ class GameApp {
       }
       this.board.state.currentSide = resume.currentSide as Side;
       this.board.state.noCaptureCount = resume.noCaptureCount;
+      this.board.state.capturedRed = JSON.parse(resume.capturedRed);
+      this.board.state.capturedBlack = JSON.parse(resume.capturedBlack);
+      Storage.clearResumeState(); // 加载成功后清除，避免重复恢复
       this.showScreen('game');
       this.updateGameInfo();
       this.renderBoard();
@@ -288,6 +314,10 @@ class GameApp {
 
   private backToMenu(): void {
     this.hideModal();
+    this.gameOverShown = false;
+    this.reviewIndex = null;
+    this.isThinking = false;
+    this.hintMove = null;
     this.stopTimer();
     this.stopAiVsAi();
     this.p2p?.close();
@@ -295,6 +325,7 @@ class GameApp {
     this.mode = null;
     this.ai = null;
     this.mySide = null;
+    this.currentPuzzleIndex = null;
     this.board.reset();
     this.notation.clear();
     this.selectedPos = null;
@@ -360,6 +391,7 @@ class GameApp {
     this.hideModal();
     this.gameOverShown = false;
     this.reviewIndex = null;
+    this.isThinking = false;
     this.timeRed = 600;
     this.timeBlack = 600;
     this.stopTimer();
@@ -369,9 +401,21 @@ class GameApp {
     this.selectedPos = null;
     this.validMoves = [];
     this.animator.stop();
+    if (this.currentPuzzleIndex !== null) {
+      const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+      this.board.loadCustomBoard(puzzle.board, puzzle.side);
+      this.puzzleStartTime = performance.now();
+    }
     if (this.mode === 'local-ai') {
-      this.ai = new AI('black', this.difficulty);
-      this.mySide = 'red';
+      if (this.currentPuzzleIndex !== null) {
+        const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+        this.ai = new AI(puzzle.side === 'red' ? 'black' : 'red', this.difficulty);
+        this.mySide = puzzle.side;
+      } else {
+        this.ai = new AI('black', this.difficulty);
+        this.mySide = 'red';
+        this.applyHandicap();
+      }
     }
     if (this.mode === 'ai-vs-ai') {
       this.startAiVsAiLoop();
@@ -384,6 +428,12 @@ class GameApp {
     this.renderBoard();
     this.updateCaptured();
     this.updateNotation();
+    if (this.mode === 'local-ai' && this.currentPuzzleIndex !== null) {
+      const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+      if (this.board.state.currentSide !== puzzle.side) {
+        this.checkAI();
+      }
+    }
   }
 
   private showPuzzles(): void {
@@ -453,7 +503,8 @@ class GameApp {
     this.selectedPos = null;
     this.validMoves = [];
     this.animator.stop();
-    this.ai = new AI('black', this.difficulty);
+    const aiSide = puzzle.side === 'red' ? 'black' : 'red';
+    this.ai = new AI(aiSide, this.difficulty);
     this.mySide = puzzle.side;
 
     this.showScreen('game');
@@ -462,7 +513,7 @@ class GameApp {
     this.updateCaptured();
     this.updateNotation();
 
-    if (puzzle.side === 'black') {
+    if (this.board.state.currentSide === aiSide) {
       this.checkAI();
     }
   }
@@ -554,6 +605,11 @@ class GameApp {
     this.mode = mode;
     this.currentPuzzleIndex = null;
     this.hintMove = null;
+    this.gameOverShown = false;
+    this.reviewIndex = null;
+    this.timeRed = 600;
+    this.timeBlack = 600;
+    this.stopTimer();
     this.board.reset();
     this.notation.clear();
     this.selectedPos = null;
@@ -584,6 +640,7 @@ class GameApp {
 
   // ========== 联机 ==========
   private async showLanHost(): Promise<void> {
+    this.p2p?.close();
     this.mode = 'lan-host';
     this.showScreen('lan');
     document.getElementById('lan-title')!.textContent = '创建房间（红方）';
@@ -621,6 +678,7 @@ class GameApp {
   }
 
   private showLanJoin(): void {
+    this.p2p?.close();
     this.mode = 'lan-join';
     this.showScreen('lan');
     document.getElementById('lan-title')!.textContent = '加入房间（黑方）';
@@ -736,27 +794,13 @@ class GameApp {
   }
 
   // ========== 游戏交互 ==========
-  private onTouchStart(e: TouchEvent): void {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
-    this.handleBoardClick(x, y);
-  }
-
-  private onPointerClick(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
-    this.handleBoardClick(x, y);
+  private onPointerDown(e: PointerEvent): void {
+    // 使用 offsetX/offsetY（CSS像素，与canvas逻辑坐标一致）
+    this.handleBoardClick(e.offsetX, e.offsetY);
   }
 
   private handleBoardClick(x: number, y: number): void {
+    if (this.mode === 'ai-vs-ai') return; // AI观战模式禁止下棋
     if (this.reviewIndex !== null) return; // 回放模式禁止下棋
     if (this.board.state.gameOver) return;
     if (this.isThinking) return;
@@ -840,10 +884,8 @@ class GameApp {
   }
 
   private checkAI(): void {
-    if (this.mode !== 'local-ai' || this.board.state.gameOver || this.board.state.currentSide !== 'black') {
-      return;
-    }
-    if (!this.ai) return;
+    if (this.mode !== 'local-ai' || this.board.state.gameOver || !this.ai) return;
+    if (this.board.state.currentSide !== this.ai.side) return;
     this.isThinking = true;
     this.updateGameInfo();
     setTimeout(() => {
@@ -899,6 +941,7 @@ class GameApp {
     if (index < 0 || index >= entries.length) return;
 
     this.reviewIndex = index;
+    this.isReplaying = true;
     this.board.reset();
     this.selectedPos = null;
     this.validMoves = [];
@@ -909,6 +952,7 @@ class GameApp {
       this.board.applyExternalMove(move);
     }
 
+    this.isReplaying = false;
     this.renderBoard();
     this.updateGameInfo();
     this.updateCaptured();
@@ -920,10 +964,12 @@ class GameApp {
     if (this.reviewIndex === null) return;
     const entries = this.notation.getAll();
 
+    this.isReplaying = true;
     this.board.reset();
     for (const entry of entries) {
       this.board.applyExternalMove(entry.move);
     }
+    this.isReplaying = false;
 
     this.reviewIndex = null;
     this.selectedPos = null;
@@ -945,6 +991,7 @@ class GameApp {
   }
 
   private onStateChange(): void {
+    if (this.isReplaying) return;
     this.renderBoard();
     this.updateGameInfo();
     this.updateCaptured();
@@ -1111,15 +1158,10 @@ class GameApp {
       );
     }
     this.notationEl.innerHTML = html.join('');
-    this.notationEl.scrollTop = this.notationEl.scrollHeight;
-
-    // 绑定点击事件
-    this.notationEl.querySelectorAll('[data-index]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const idx = parseInt((e.currentTarget as HTMLElement).dataset.index!, 10);
-        this.jumpToMove(idx);
-      });
-    });
+    // 回放模式下不自动滚动到底部
+    if (this.reviewIndex === null) {
+      this.notationEl.scrollTop = this.notationEl.scrollHeight;
+    }
   }
 
   private exportNotation(): void {
@@ -1173,6 +1215,12 @@ class GameApp {
     this.animator.stop();
     this.mode = 'local-pvp';
     this.mySide = null;
+    // 检测导入局面是否已终局
+    const currentSide = this.board.state.currentSide;
+    if (!Rules.hasLegalMoves(this.board.state.board, currentSide)) {
+      this.board.state.gameOver = true;
+      this.board.state.winner = this.board.state.check ? (currentSide === 'red' ? 'black' : 'red') : null;
+    }
     this.updateGameInfo();
     this.renderBoard();
     this.updateCaptured();
@@ -1194,6 +1242,8 @@ class GameApp {
       const idx = parseInt(puzzleIdx, 10);
       if (idx >= 0 && idx < ALL_PUZZLES.length) {
         setTimeout(() => this.startPuzzle(idx), 500);
+        // 清除URL参数避免刷新重复加载
+        history.replaceState(null, '', window.location.pathname);
         return;
       }
     }
@@ -1217,6 +1267,8 @@ class GameApp {
           this.updateNotation();
         }, 800);
       }
+      // 清除URL hash避免刷新重复加载
+      history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }
 

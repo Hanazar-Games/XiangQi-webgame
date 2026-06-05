@@ -12,6 +12,7 @@ import { ALL_THEMES } from './game/themes.js';
 import { MoveCodec } from './game/codec.js';
 import { FenCodec } from './game/fen.js';
 import { PIECE_NAMES } from './game/types.js';
+import { Rules } from './game/rules.js';
 class GameApp {
     constructor() {
         this.mode = null;
@@ -31,6 +32,7 @@ class GameApp {
         this.lastEvalScore = 0;
         this.gameOverShown = false;
         this.reviewIndex = null;
+        this.isReplaying = false;
         this.savedSettings = Storage.loadSettings();
         this.timeRed = 600;
         this.timeBlack = 600;
@@ -76,6 +78,18 @@ class GameApp {
                 Storage.clearHistory();
                 this.showHistory();
             }
+        });
+        // 主题选择
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+                const el = e.currentTarget;
+                el.classList.add('active');
+                const themeIdx = parseInt(el.dataset.theme, 10);
+                this.renderer.setTheme(ALL_THEMES[themeIdx]);
+                this.renderBoard();
+                this.saveSettings();
+            });
         });
         // 难度选择
         document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -131,8 +145,7 @@ class GameApp {
             this.hideModal();
             this.backToMenu();
         });
-        this.canvas.addEventListener('click', (e) => this.onPointerClick(e));
-        this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
+        this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
         // 音效开关
         this.soundToggle.addEventListener('change', () => {
             this.audio.setEnabled(this.soundToggle.checked);
@@ -169,6 +182,14 @@ class GameApp {
         document.getElementById('btn-puzzle-back').addEventListener('click', () => this.backToMenu());
         // 规则
         document.getElementById('btn-rules-back').addEventListener('click', () => this.backToMenu());
+        // 记谱列表事件委托（只绑定一次）
+        this.notationEl.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-index]');
+            if (target) {
+                const idx = parseInt(target.dataset.index, 10);
+                this.jumpToMove(idx);
+            }
+        });
     }
     checkResumeState() {
         const resume = Storage.loadResumeState();
@@ -189,6 +210,9 @@ class GameApp {
             }
             this.board.state.currentSide = resume.currentSide;
             this.board.state.noCaptureCount = resume.noCaptureCount;
+            this.board.state.capturedRed = JSON.parse(resume.capturedRed);
+            this.board.state.capturedBlack = JSON.parse(resume.capturedBlack);
+            Storage.clearResumeState(); // 加载成功后清除，避免重复恢复
             this.showScreen('game');
             this.updateGameInfo();
             this.renderBoard();
@@ -261,6 +285,10 @@ class GameApp {
     }
     backToMenu() {
         this.hideModal();
+        this.gameOverShown = false;
+        this.reviewIndex = null;
+        this.isThinking = false;
+        this.hintMove = null;
         this.stopTimer();
         this.stopAiVsAi();
         this.p2p?.close();
@@ -268,6 +296,7 @@ class GameApp {
         this.mode = null;
         this.ai = null;
         this.mySide = null;
+        this.currentPuzzleIndex = null;
         this.board.reset();
         this.notation.clear();
         this.selectedPos = null;
@@ -327,6 +356,7 @@ class GameApp {
         this.hideModal();
         this.gameOverShown = false;
         this.reviewIndex = null;
+        this.isThinking = false;
         this.timeRed = 600;
         this.timeBlack = 600;
         this.stopTimer();
@@ -336,9 +366,22 @@ class GameApp {
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
+        if (this.currentPuzzleIndex !== null) {
+            const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+            this.board.loadCustomBoard(puzzle.board, puzzle.side);
+            this.puzzleStartTime = performance.now();
+        }
         if (this.mode === 'local-ai') {
-            this.ai = new AI('black', this.difficulty);
-            this.mySide = 'red';
+            if (this.currentPuzzleIndex !== null) {
+                const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+                this.ai = new AI(puzzle.side === 'red' ? 'black' : 'red', this.difficulty);
+                this.mySide = puzzle.side;
+            }
+            else {
+                this.ai = new AI('black', this.difficulty);
+                this.mySide = 'red';
+                this.applyHandicap();
+            }
         }
         if (this.mode === 'ai-vs-ai') {
             this.startAiVsAiLoop();
@@ -351,6 +394,12 @@ class GameApp {
         this.renderBoard();
         this.updateCaptured();
         this.updateNotation();
+        if (this.mode === 'local-ai' && this.currentPuzzleIndex !== null) {
+            const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+            if (this.board.state.currentSide !== puzzle.side) {
+                this.checkAI();
+            }
+        }
     }
     showPuzzles() {
         this.showScreen('puzzle');
@@ -419,14 +468,15 @@ class GameApp {
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
-        this.ai = new AI('black', this.difficulty);
+        const aiSide = puzzle.side === 'red' ? 'black' : 'red';
+        this.ai = new AI(aiSide, this.difficulty);
         this.mySide = puzzle.side;
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
         this.updateCaptured();
         this.updateNotation();
-        if (puzzle.side === 'black') {
+        if (this.board.state.currentSide === aiSide) {
             this.checkAI();
         }
     }
@@ -511,6 +561,11 @@ class GameApp {
         this.mode = mode;
         this.currentPuzzleIndex = null;
         this.hintMove = null;
+        this.gameOverShown = false;
+        this.reviewIndex = null;
+        this.timeRed = 600;
+        this.timeBlack = 600;
+        this.stopTimer();
         this.board.reset();
         this.notation.clear();
         this.selectedPos = null;
@@ -541,6 +596,7 @@ class GameApp {
     }
     // ========== 联机 ==========
     async showLanHost() {
+        this.p2p?.close();
         this.mode = 'lan-host';
         this.showScreen('lan');
         document.getElementById('lan-title').textContent = '创建房间（红方）';
@@ -574,6 +630,7 @@ class GameApp {
         }
     }
     showLanJoin() {
+        this.p2p?.close();
         this.mode = 'lan-join';
         this.showScreen('lan');
         document.getElementById('lan-title').textContent = '加入房间（黑方）';
@@ -688,25 +745,13 @@ class GameApp {
         return div.innerHTML;
     }
     // ========== 游戏交互 ==========
-    onTouchStart(e) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const x = (touch.clientX - rect.left) * scaleX;
-        const y = (touch.clientY - rect.top) * scaleY;
-        this.handleBoardClick(x, y);
-    }
-    onPointerClick(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        this.handleBoardClick(x, y);
+    onPointerDown(e) {
+        // 使用 offsetX/offsetY（CSS像素，与canvas逻辑坐标一致）
+        this.handleBoardClick(e.offsetX, e.offsetY);
     }
     handleBoardClick(x, y) {
+        if (this.mode === 'ai-vs-ai')
+            return; // AI观战模式禁止下棋
         if (this.reviewIndex !== null)
             return; // 回放模式禁止下棋
         if (this.board.state.gameOver)
@@ -785,10 +830,9 @@ class GameApp {
         }
     }
     checkAI() {
-        if (this.mode !== 'local-ai' || this.board.state.gameOver || this.board.state.currentSide !== 'black') {
+        if (this.mode !== 'local-ai' || this.board.state.gameOver || !this.ai)
             return;
-        }
-        if (!this.ai)
+        if (this.board.state.currentSide !== this.ai.side)
             return;
         this.isThinking = true;
         this.updateGameInfo();
@@ -845,6 +889,7 @@ class GameApp {
         if (index < 0 || index >= entries.length)
             return;
         this.reviewIndex = index;
+        this.isReplaying = true;
         this.board.reset();
         this.selectedPos = null;
         this.validMoves = [];
@@ -853,6 +898,7 @@ class GameApp {
             const move = entries[i].move;
             this.board.applyExternalMove(move);
         }
+        this.isReplaying = false;
         this.renderBoard();
         this.updateGameInfo();
         this.updateCaptured();
@@ -863,10 +909,12 @@ class GameApp {
         if (this.reviewIndex === null)
             return;
         const entries = this.notation.getAll();
+        this.isReplaying = true;
         this.board.reset();
         for (const entry of entries) {
             this.board.applyExternalMove(entry.move);
         }
+        this.isReplaying = false;
         this.reviewIndex = null;
         this.selectedPos = null;
         this.validMoves = [];
@@ -887,6 +935,8 @@ class GameApp {
         this.jumpToMove(newIndex);
     }
     onStateChange() {
+        if (this.isReplaying)
+            return;
         this.renderBoard();
         this.updateGameInfo();
         this.updateCaptured();
@@ -1044,14 +1094,10 @@ class GameApp {
                 `</div>`);
         }
         this.notationEl.innerHTML = html.join('');
-        this.notationEl.scrollTop = this.notationEl.scrollHeight;
-        // 绑定点击事件
-        this.notationEl.querySelectorAll('[data-index]').forEach(el => {
-            el.addEventListener('click', (e) => {
-                const idx = parseInt(e.currentTarget.dataset.index, 10);
-                this.jumpToMove(idx);
-            });
-        });
+        // 回放模式下不自动滚动到底部
+        if (this.reviewIndex === null) {
+            this.notationEl.scrollTop = this.notationEl.scrollHeight;
+        }
     }
     exportNotation() {
         const text = this.notation.exportText();
@@ -1102,6 +1148,12 @@ class GameApp {
         this.animator.stop();
         this.mode = 'local-pvp';
         this.mySide = null;
+        // 检测导入局面是否已终局
+        const currentSide = this.board.state.currentSide;
+        if (!Rules.hasLegalMoves(this.board.state.board, currentSide)) {
+            this.board.state.gameOver = true;
+            this.board.state.winner = this.board.state.check ? (currentSide === 'red' ? 'black' : 'red') : null;
+        }
         this.updateGameInfo();
         this.renderBoard();
         this.updateCaptured();
@@ -1121,6 +1173,8 @@ class GameApp {
             const idx = parseInt(puzzleIdx, 10);
             if (idx >= 0 && idx < ALL_PUZZLES.length) {
                 setTimeout(() => this.startPuzzle(idx), 500);
+                // 清除URL参数避免刷新重复加载
+                history.replaceState(null, '', window.location.pathname);
                 return;
             }
         }
@@ -1143,6 +1197,8 @@ class GameApp {
                     this.updateNotation();
                 }, 800);
             }
+            // 清除URL hash避免刷新重复加载
+            history.replaceState(null, '', window.location.pathname + window.location.search);
         }
     }
     resign() {

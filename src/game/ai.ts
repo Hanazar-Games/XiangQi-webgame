@@ -7,7 +7,7 @@ import { Engine, SearchResult } from './engine.js';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
 export class AI {
-  private side: Side;
+  side: Side;
   private openingBook = new OpeningBook();
   private engine: Engine;
 

@@ -178,7 +178,7 @@ export class Board {
   // 设置外部状态（用于联机接收对方移动）
   applyExternalMove(move: Move): boolean {
     const piece = this.state.board[move.from.y][move.from.x];
-    if (!piece) return false;
+    if (!piece || piece.side !== this.state.currentSide) return false;
 
     this.state.board[move.to.y][move.to.x] = piece;
     this.state.board[move.from.y][move.from.x] = null;
