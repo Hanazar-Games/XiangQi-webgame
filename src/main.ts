@@ -282,11 +282,13 @@ class GameApp {
       const moves: Move[] = JSON.parse(resume.moveHistory);
       this.mode = null; // 恢复查看模式，不关联任何对战模式
       this.mySide = resume.mySide as Side;
+      this.isReplaying = true;
       this.board.reset();
       for (const move of moves) {
         this.board.applyExternalMove(move);
         this.notation.record(move);
       }
+      this.isReplaying = false;
       this.board.state.currentSide = resume.currentSide as Side;
       this.board.state.noCaptureCount = resume.noCaptureCount;
       this.board.state.capturedRed = JSON.parse(resume.capturedRed);
@@ -1435,6 +1437,7 @@ class GameApp {
     }
 
     // 重建棋局
+    this.isReplaying = true;
     this.board.reset();
     this.notation.clear();
     const moves = MoveCodec.decode(entry.movesEncoded, this.board.state.board);
@@ -1442,6 +1445,7 @@ class GameApp {
       this.board.applyExternalMove(move);
       this.notation.record(move);
     }
+    this.isReplaying = false;
 
     this.mode = null;
     this.mySide = null;
@@ -1645,10 +1649,11 @@ class GameApp {
     const btnUndo = document.getElementById('btn-undo')!;
     const btnDraw = document.getElementById('btn-draw')!;
     const btnResign = document.getElementById('btn-resign')!;
-    btnHint.classList.toggle('hidden', isLan);
-    btnUndo.classList.toggle('hidden', isLan);
-    btnDraw.classList.toggle('hidden', !isLan || state.gameOver);
-    btnResign.classList.toggle('hidden', !isLan || state.gameOver);
+    const isReview = this.reviewIndex !== null;
+    btnHint.classList.toggle('hidden', isLan || isReview);
+    btnUndo.classList.toggle('hidden', isLan || isReview);
+    btnDraw.classList.toggle('hidden', !isLan || state.gameOver || isReview);
+    btnResign.classList.toggle('hidden', !isLan || state.gameOver || isReview);
 
     if (state.gameOver && this.reviewIndex === null) {
       this.stopTimer();
@@ -1838,10 +1843,12 @@ class GameApp {
       if (moves.length > 0) {
         setTimeout(() => {
           this.startGame('local-pvp');
+          this.isReplaying = true;
           for (const move of moves) {
             this.board.applyExternalMove(move);
             this.notation.record(move);
           }
+          this.isReplaying = false;
           this.renderBoard();
           this.updateGameInfo();
           this.updateCaptured();
@@ -1854,7 +1861,7 @@ class GameApp {
   }
 
   private resign(): void {
-    if (this.board.state.gameOver || !this.mySide) return;
+    if (this.board.state.gameOver || !this.mySide || this.reviewIndex !== null) return;
     if (!confirm('确定要认输吗？')) return;
     this.board.state.gameOver = true;
     this.board.state.winner = this.mySide === 'red' ? 'black' : 'red';
