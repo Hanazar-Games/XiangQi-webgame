@@ -32,6 +32,7 @@
           <button class="handicap-btn" data-handicap="rook">让车</button>
         </div>
         <button id="btn-puzzles" class="btn-primary">残局挑战</button>
+        <button id="btn-editor" class="btn-primary">摆盘模式</button>
         <button id="btn-ai-vs-ai" class="btn-primary">AI观战</button>
         <div id="difficulty-select" class="difficulty-bar">
           <span>难度：</span>
@@ -113,6 +114,16 @@
             <h3>红方被吃</h3>
             <div id="captured-red" class="captured-list"></div>
           </div>
+          <div id="analysis-panel" class="panel-section hidden">
+            <h3>复盘分析</h3>
+            <div class="analysis-info">
+              <div id="analysis-score" class="analysis-score">--</div>
+              <div id="analysis-verdict" class="analysis-verdict">点击分析按钮查看AI建议</div>
+              <div id="analysis-suggestion" class="analysis-suggestion"></div>
+            </div>
+            <button id="btn-analyze" class="btn-primary" style="width:100%;margin-top:8px">分析当前局面</button>
+            <div id="analysis-loading" class="analysis-loading hidden">正在分析...</div>
+          </div>
           <div id="chat-panel" class="panel-section chat-panel hidden">
             <h3>聊天</h3>
             <div id="chat-messages" class="chat-scroll"></div>
@@ -179,6 +190,46 @@
       </div>
     </div>
 
+    <!-- 摆盘模式 -->
+    <div id="editor-screen" class="screen">
+      <div class="editor-header">
+        <button id="btn-editor-back" class="btn-small">返回菜单</button>
+        <span class="editor-title">摆盘模式</span>
+        <div class="editor-header-actions">
+          <button id="btn-editor-standard" class="btn-small">标准开局</button>
+          <button id="btn-editor-clear" class="btn-small">清空棋盘</button>
+          <button id="btn-editor-from-game" class="btn-small">从对局导入</button>
+          <button id="btn-editor-copy-fen" class="btn-small">复制FEN</button>
+          <button id="btn-editor-import-fen" class="btn-small">导入FEN</button>
+        </div>
+      </div>
+      <div class="editor-container">
+        <div class="board-wrapper" id="editor-board-wrapper">
+          <!-- board-canvas 会动态移动到这里 -->
+        </div>
+        <div class="editor-panel">
+          <div class="editor-section">
+            <h4>当前行棋方</h4>
+            <div class="editor-side-toggle">
+              <button id="btn-editor-side-red" class="side-btn active" data-side="red">红方先行</button>
+              <button id="btn-editor-side-black" class="side-btn" data-side="black">黑方先行</button>
+            </div>
+          </div>
+          <div class="editor-section">
+            <h4>选择棋子</h4>
+            <div id="editor-palette" class="editor-palette"></div>
+            <button id="btn-editor-erase" class="erase-btn" data-brush="erase">✕ 橡皮擦</button>
+          </div>
+          <div class="editor-section">
+            <h4>操作</h4>
+            <button id="btn-editor-play" class="btn-primary" style="width:100%;margin-bottom:8px">以此局面开始对局</button>
+            <button id="btn-editor-save" class="btn-secondary" style="width:100%">保存为残局</button>
+          </div>
+          <div id="editor-validation" class="editor-validation"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 残局挑战 -->
     <div id="puzzle-screen" class="screen">
       <div class="rules-panel">
@@ -234,6 +285,7 @@
         <p id="modal-message"></p>
         <div class="modal-actions">
           <button id="btn-modal-restart" class="btn-primary">再来一局</button>
+          <button id="btn-modal-analysis" class="btn-secondary">复盘分析</button>
           <button id="btn-modal-menu" class="btn-secondary">返回菜单</button>
         </div>
       </div>

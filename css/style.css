@@ -670,6 +670,13 @@ body {
   align-self: flex-start;
 }
 
+.chat-msg.system {
+  background: rgba(241, 196, 15, 0.1);
+  align-self: center;
+  font-size: 0.85rem;
+  border: 1px solid rgba(241, 196, 15, 0.2);
+}
+
 .chat-msg .sender {
   font-size: 0.75rem;
   opacity: 0.7;
@@ -923,6 +930,28 @@ body {
   margin-left: 6px;
 }
 
+.puzzle-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.puzzle-delete-btn {
+  background: transparent;
+  border: none;
+  color: #e74c3c;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.puzzle-delete-btn:hover {
+  background: rgba(231, 76, 60, 0.15);
+}
+
 /* 追加样式12 - AI观战控制 */
 .ai-control {
   display: flex;
@@ -999,4 +1028,238 @@ body {
   background: rgba(78, 204, 113, 0.3);
   border-color: #4ecc71;
   color: #fff;
+}
+
+/* 追加样式15 - 摆盘模式 */
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.editor-title {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #d4a574;
+}
+
+.editor-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.editor-container {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.editor-container .board-wrapper {
+  flex: 0 0 auto;
+}
+
+.editor-panel {
+  flex: 1;
+  min-width: 220px;
+  max-width: 320px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor-section h4 {
+  font-size: 0.9rem;
+  color: #aaa;
+  margin-bottom: 8px;
+}
+
+.editor-side-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.side-btn {
+  flex: 1;
+  padding: 8px;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.side-btn.active[data-side="red"] {
+  background: rgba(200, 75, 49, 0.3);
+  border-color: #c84b31;
+  color: #fff;
+}
+
+.side-btn.active[data-side="black"] {
+  background: rgba(52, 73, 94, 0.5);
+  border-color: #3498db;
+  color: #fff;
+}
+
+.editor-palette {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.piece-brush {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.05);
+  color: #eee;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-width: 0;
+}
+
+.piece-brush:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.piece-brush.active {
+  border-color: #f1c40f;
+  background: rgba(241, 196, 15, 0.15);
+}
+
+.piece-brush.red {
+  color: #e74c3c;
+}
+
+.piece-brush.black {
+  color: #bdc3c7;
+}
+
+.erase-btn {
+  width: 100%;
+  padding: 8px;
+  margin-top: 6px;
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.erase-btn.active {
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+}
+
+.editor-validation {
+  font-size: 0.8rem;
+  min-height: 1.2em;
+}
+
+.editor-validation.error {
+  color: #e74c3c;
+}
+
+.editor-validation.ok {
+  color: #4ecc71;
+}
+
+/* 自定义残局卡片 */
+.custom-puzzle-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(241, 196, 15, 0.2);
+  color: #f1c40f;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  margin-left: 6px;
+}
+
+.delete-puzzle-btn {
+  padding: 4px 8px;
+  background: rgba(231, 76, 60, 0.2);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+/* 复盘分析面板 */
+.analysis-info {
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.analysis-score {
+  font-size: 1.4rem;
+  font-weight: bold;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.analysis-score.red-adv {
+  color: #e74c3c;
+}
+
+.analysis-score.black-adv {
+  color: #3498db;
+}
+
+.analysis-score.even {
+  color: #aaa;
+}
+
+.analysis-verdict {
+  font-size: 0.9rem;
+  text-align: center;
+  color: #ccc;
+  margin-bottom: 6px;
+}
+
+.analysis-suggestion {
+  font-size: 0.85rem;
+  color: #f1c40f;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.analysis-loading {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #aaa;
+  margin-top: 6px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 历史对局分析按钮 */
+.history-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.history-actions .btn-small {
+  font-size: 0.75rem;
+  padding: 4px 10px;
 }

@@ -2,7 +2,7 @@ type MessageHandler = (data: string) => void;
 type ConnectionStateHandler = (state: 'connecting' | 'connected' | 'disconnected') => void;
 
 export interface GameMessage {
-  type: 'move' | 'chat' | 'ping' | 'draw-request' | 'draw-accept' | 'draw-decline' | 'resign';
+  type: 'move' | 'chat' | 'ping' | 'draw-request' | 'draw-accept' | 'draw-decline' | 'resign' | 'invalid';
   payload: string;
 }
 
@@ -19,8 +19,11 @@ export function parseMessage(data: string): GameMessage {
       return obj as GameMessage;
     }
   } catch {}
-  // 兼容旧版纯move消息
-  return { type: 'move', payload: data };
+  // 兼容旧版纯move消息：仅当payload看起来是JSON对象时才回退
+  if (data.trim().startsWith('{')) {
+    return { type: 'move', payload: data };
+  }
+  return { type: 'invalid', payload: data };
 }
 
 export class P2PConnection {
@@ -33,10 +36,19 @@ export class P2PConnection {
   private iceCheckInterval: ReturnType<typeof setInterval> | null = null;
   private iceCheckTimeout: ReturnType<typeof setTimeout> | null = null;
   private pendingQueue: string[] = [];
+  private maxPendingQueue = 100;
+  private closed = false;
+  private lastState: 'connecting' | 'connected' | 'disconnected' | null = null;
 
   constructor(onMessage: MessageHandler, onStateChange: ConnectionStateHandler) {
     this.onMessage = onMessage;
     this.onStateChange = onStateChange;
+  }
+
+  private emitState(state: 'connecting' | 'connected' | 'disconnected'): void {
+    if (this.lastState === state) return;
+    this.lastState = state;
+    this.onStateChange(state);
   }
 
   // 创建房间（Host）
@@ -44,7 +56,9 @@ export class P2PConnection {
     this.close();
     this.iceCandidates = [];
     this.gatheringComplete = false;
-    this.onStateChange('connecting');
+    this.closed = false;
+    this.lastState = null;
+    this.emitState('connecting');
     this.pc = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     });
@@ -68,8 +82,8 @@ export class P2PConnection {
 
     this.pc.onconnectionstatechange = () => {
       const state = this.pc?.connectionState;
-      if (state === 'failed' || state === 'disconnected') {
-        this.onStateChange('disconnected');
+      if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+        this.emitState('disconnected');
         this.close();
       }
     };
@@ -93,11 +107,17 @@ export class P2PConnection {
     try {
       const data = JSON.parse(decodeURIComponent(atob(answerJson)));
       await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      await Promise.all((data.candidates || []).map((c: RTCIceCandidateInit) =>
-        this.pc!.addIceCandidate(new RTCIceCandidate(c))
-      ));
+      const candidates = (data.candidates || []) as RTCIceCandidateInit[];
+      for (const c of candidates) {
+        try {
+          await this.pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch (e) {
+          // 忽略无效的ICE候选
+          console.warn('Invalid ICE candidate ignored:', e);
+        }
+      }
     } catch (e) {
-      this.onStateChange('disconnected');
+      this.emitState('disconnected');
       throw e;
     }
   }
@@ -107,12 +127,14 @@ export class P2PConnection {
     this.close();
     this.iceCandidates = [];
     this.gatheringComplete = false;
-    this.onStateChange('connecting');
+    this.closed = false;
+    this.lastState = null;
+    this.emitState('connecting');
     let data: { sdp: RTCSessionDescriptionInit; candidates?: RTCIceCandidateInit[] };
     try {
       data = JSON.parse(decodeURIComponent(atob(offerJson)));
     } catch (e) {
-      this.onStateChange('disconnected');
+      this.emitState('disconnected');
       throw e;
     }
 
@@ -137,10 +159,22 @@ export class P2PConnection {
       }
     };
 
+    this.pc.onconnectionstatechange = () => {
+      const state = this.pc?.connectionState;
+      if (state === 'failed' || state === 'disconnected' || state === 'closed') {
+        this.emitState('disconnected');
+        this.close();
+      }
+    };
+
     await this.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
 
     for (const cand of data.candidates || []) {
-      await this.pc.addIceCandidate(new RTCIceCandidate(cand));
+      try {
+        await this.pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.warn('Invalid ICE candidate ignored:', e);
+      }
     }
 
     const answer = await this.pc.createAnswer();
@@ -168,35 +202,35 @@ export class P2PConnection {
     return new Promise((resolve) => {
       this.iceCheckInterval = setInterval(() => {
         if (this.gatheringComplete || this.pc?.iceGatheringState === 'complete') {
-          if (this.iceCheckInterval) clearInterval(this.iceCheckInterval);
-          if (this.iceCheckTimeout) clearTimeout(this.iceCheckTimeout);
-          this.iceCheckInterval = null;
-          this.iceCheckTimeout = null;
+          this.clearIceTimers();
           resolve();
         }
       }, 200);
       this.iceCheckTimeout = setTimeout(() => {
-        if (this.iceCheckInterval) clearInterval(this.iceCheckInterval);
-        this.iceCheckInterval = null;
-        this.iceCheckTimeout = null;
+        this.clearIceTimers();
         resolve();
       }, 10000);
     });
   }
 
+  private clearIceTimers(): void {
+    if (this.iceCheckInterval) { clearInterval(this.iceCheckInterval); this.iceCheckInterval = null; }
+    if (this.iceCheckTimeout) { clearTimeout(this.iceCheckTimeout); this.iceCheckTimeout = null; }
+  }
+
   private setupChannel(channel: RTCDataChannel): void {
     channel.onopen = () => {
-      this.onStateChange('connected');
+      this.emitState('connected');
       this.drainQueue();
     };
 
     channel.onclose = () => {
-      this.onStateChange('disconnected');
+      this.emitState('disconnected');
     };
 
     channel.onerror = (e) => {
       console.error('DataChannel error:', e);
-      this.onStateChange('disconnected');
+      this.emitState('disconnected');
     };
 
     channel.onmessage = (e) => {
@@ -211,27 +245,50 @@ export class P2PConnection {
   }
 
   send(data: string): boolean {
+    if (this.closed) return false;
     if (this.channel && this.channel.readyState === 'open') {
       this.channel.send(data);
       return true;
+    }
+    if (this.pendingQueue.length >= this.maxPendingQueue) {
+      this.pendingQueue.shift(); // 丢弃最旧的消息
+      console.warn('Pending queue full, dropped oldest message');
     }
     this.pendingQueue.push(data);
     return false;
   }
 
   isConnected(): boolean {
-    return this.channel?.readyState === 'open';
+    return !this.closed && this.channel?.readyState === 'open' && this.pc?.connectionState !== 'failed' && this.pc?.connectionState !== 'closed';
   }
 
   close(): void {
-    if (this.iceCheckInterval) { clearInterval(this.iceCheckInterval); this.iceCheckInterval = null; }
-    if (this.iceCheckTimeout) { clearTimeout(this.iceCheckTimeout); this.iceCheckTimeout = null; }
-    this.channel?.close();
-    this.pc?.close();
-    this.channel = null;
-    this.pc = null;
+    if (this.closed) return;
+    this.closed = true;
+    this.clearIceTimers();
+
+    // 先移除事件监听器，防止重复触发
+    if (this.channel) {
+      this.channel.onopen = null;
+      this.channel.onclose = null;
+      this.channel.onerror = null;
+      this.channel.onmessage = null;
+      try { this.channel.close(); } catch {}
+      this.channel = null;
+    }
+
+    if (this.pc) {
+      this.pc.onicecandidate = null;
+      this.pc.onicegatheringstatechange = null;
+      this.pc.onconnectionstatechange = null;
+      this.pc.ondatachannel = null;
+      try { this.pc.close(); } catch {}
+      this.pc = null;
+    }
+
     this.iceCandidates = [];
     this.gatheringComplete = false;
     this.pendingQueue = [];
+    this.lastState = null;
   }
 }

@@ -2,6 +2,7 @@ const SETTINGS_KEY = 'xiangqi_settings';
 const HISTORY_KEY = 'xiangqi_history';
 const PUZZLE_KEY = 'xiangqi_puzzles';
 const RESUME_KEY = 'xiangqi_resume';
+const CUSTOM_PUZZLES_KEY = 'xiangqi_custom_puzzles';
 const MAX_HISTORY = 20;
 export class Storage {
     static loadSettings() {
@@ -25,15 +26,18 @@ export class Storage {
         }
         catch { }
     }
-    static addHistory(moves, mode, winner) {
+    static addHistory(moves, mode, winner, movesEncoded) {
         try {
             const history = this.loadHistory();
-            history.unshift({
+            const entry = {
                 date: new Date().toISOString(),
                 moves,
                 mode,
                 winner,
-            });
+            };
+            if (movesEncoded)
+                entry.movesEncoded = movesEncoded;
+            history.unshift(entry);
             if (history.length > MAX_HISTORY)
                 history.length = MAX_HISTORY;
             localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
@@ -102,6 +106,28 @@ export class Storage {
     static clearResumeState() {
         try {
             localStorage.removeItem(RESUME_KEY);
+        }
+        catch { }
+    }
+    static saveCustomPuzzles(puzzles) {
+        try {
+            localStorage.setItem(CUSTOM_PUZZLES_KEY, JSON.stringify(puzzles));
+        }
+        catch { }
+    }
+    static loadCustomPuzzles() {
+        try {
+            const raw = localStorage.getItem(CUSTOM_PUZZLES_KEY);
+            if (raw)
+                return JSON.parse(raw);
+        }
+        catch { }
+        return [];
+    }
+    static deleteCustomPuzzle(id) {
+        try {
+            const puzzles = this.loadCustomPuzzles().filter(p => p.id !== id);
+            this.saveCustomPuzzles(puzzles);
         }
         catch { }
     }

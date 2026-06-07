@@ -8,7 +8,8 @@ export interface GameSettings {
 
 export interface SavedGame {
   date: string;
-  moves: string;
+  moves: string; // 记谱文本
+  movesEncoded?: string; // MoveCodec 编码的紧凑字符串（用于复盘重建）
   mode: string;
   winner: string | null;
 }
@@ -24,6 +25,7 @@ const SETTINGS_KEY = 'xiangqi_settings';
 const HISTORY_KEY = 'xiangqi_history';
 const PUZZLE_KEY = 'xiangqi_puzzles';
 const RESUME_KEY = 'xiangqi_resume';
+const CUSTOM_PUZZLES_KEY = 'xiangqi_custom_puzzles';
 const MAX_HISTORY = 20;
 
 export interface ResumeState {
@@ -35,6 +37,15 @@ export interface ResumeState {
   capturedBlack: string;
   noCaptureCount: number;
   timestamp: number;
+}
+
+export interface CustomPuzzle {
+  id: string;
+  name: string;
+  description: string;
+  board: ({ type: string; side: string } | null)[][]; // JSON-safe format
+  side: string;
+  createdAt: string;
 }
 
 export class Storage {
@@ -58,15 +69,17 @@ export class Storage {
     } catch {}
   }
 
-  static addHistory(moves: string, mode: string, winner: string | null): void {
+  static addHistory(moves: string, mode: string, winner: string | null, movesEncoded?: string): void {
     try {
       const history = this.loadHistory();
-      history.unshift({
+      const entry: SavedGame = {
         date: new Date().toISOString(),
         moves,
         mode,
         winner,
-      });
+      };
+      if (movesEncoded) entry.movesEncoded = movesEncoded;
+      history.unshift(entry);
       if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
     } catch {}
@@ -132,6 +145,27 @@ export class Storage {
   static clearResumeState(): void {
     try {
       localStorage.removeItem(RESUME_KEY);
+    } catch {}
+  }
+
+  static saveCustomPuzzles(puzzles: CustomPuzzle[]): void {
+    try {
+      localStorage.setItem(CUSTOM_PUZZLES_KEY, JSON.stringify(puzzles));
+    } catch {}
+  }
+
+  static loadCustomPuzzles(): CustomPuzzle[] {
+    try {
+      const raw = localStorage.getItem(CUSTOM_PUZZLES_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return [];
+  }
+
+  static deleteCustomPuzzle(id: string): void {
+    try {
+      const puzzles = this.loadCustomPuzzles().filter(p => p.id !== id);
+      this.saveCustomPuzzles(puzzles);
     } catch {}
   }
 }

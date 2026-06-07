@@ -9,6 +9,7 @@ const ASSETS = [
   './dist/game/audio.js',
   './dist/game/board.js',
   './dist/game/codec.js',
+  './dist/game/editor.js',
   './dist/game/engine.js',
   './dist/game/fen.js',
   './dist/game/notation.js',

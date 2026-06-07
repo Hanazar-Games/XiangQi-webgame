@@ -11,10 +11,11 @@ import { ALL_PUZZLES } from './game/puzzles.js';
 import { ALL_THEMES } from './game/themes.js';
 import { MoveCodec } from './game/codec.js';
 import { FenCodec } from './game/fen.js';
-import { Position, Side, Move, PIECE_NAMES } from './game/types.js';
+import { Piece, Position, Side, Move, PIECE_NAMES } from './game/types.js';
 import { Rules } from './game/rules.js';
+import { Brush, createEmptyBoard, createStandardBoard, BRUSH_PIECES, validateBoard } from './game/editor.js';
 
-type GameMode = 'local-pvp' | 'local-ai' | 'lan-host' | 'lan-join' | 'ai-vs-ai';
+type GameMode = 'local-pvp' | 'local-ai' | 'lan-host' | 'lan-join' | 'ai-vs-ai' | 'editor';
 
 class GameApp {
   private board: Board;
@@ -46,6 +47,10 @@ class GameApp {
   private aiRed: AI | null = null;
   private aiBlack: AI | null = null;
   private puzzleStartTime = 0;
+  private editorBrush: Brush = null;
+  private editorBoard: (Piece | null)[][] = createEmptyBoard();
+  private editorSide: Side = 'red';
+  private editorCanvasParent: HTMLElement | null = null;
 
   // DOM缓存
   private screens: Record<string, HTMLElement>;
@@ -65,6 +70,7 @@ class GameApp {
       rules: document.getElementById('rules-screen')!,
       puzzle: document.getElementById('puzzle-screen')!,
       history: document.getElementById('history-screen')!,
+      editor: document.getElementById('editor-screen')!,
     };
 
     this.notationEl = document.getElementById('notation-list')!;
@@ -164,6 +170,11 @@ class GameApp {
       this.hideModal();
       this.backToMenu();
     });
+    document.getElementById('btn-modal-analysis')!.addEventListener('click', () => {
+      this.hideModal();
+      this.startAnalysisFromCurrentGame();
+    });
+    document.getElementById('btn-analyze')!.addEventListener('click', () => this.analyzeCurrentPosition());
     this.canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
 
     // 音效开关
@@ -217,6 +228,45 @@ class GameApp {
         this.jumpToMove(idx);
       }
     });
+
+    // 摆盘模式事件
+    document.getElementById('btn-editor')!.addEventListener('click', () => this.showEditor());
+    document.getElementById('btn-editor-back')!.addEventListener('click', () => this.exitEditor());
+    document.getElementById('btn-editor-clear')!.addEventListener('click', () => {
+      this.editorBoard = createEmptyBoard();
+      this.renderEditorBoard();
+      this.validateEditor();
+    });
+    document.getElementById('btn-editor-standard')!.addEventListener('click', () => {
+      this.editorBoard = createStandardBoard();
+      this.renderEditorBoard();
+      this.validateEditor();
+    });
+    document.getElementById('btn-editor-save')!.addEventListener('click', () => this.saveCustomPuzzle());
+    document.getElementById('btn-editor-import-fen')!.addEventListener('click', () => this.importFenEditor());
+    document.getElementById('btn-editor-copy-fen')!.addEventListener('click', () => this.exportFenEditor());
+    document.getElementById('btn-editor-from-game')!.addEventListener('click', () => this.importFromCurrentGame());
+    document.getElementById('btn-editor-play')!.addEventListener('click', () => this.startFromEditor());
+    document.getElementById('btn-editor-side-red')!.addEventListener('click', () => {
+      this.editorSide = 'red';
+      this.updateEditorSideUI();
+    });
+    document.getElementById('btn-editor-side-black')!.addEventListener('click', () => {
+      this.editorSide = 'black';
+      this.updateEditorSideUI();
+    });
+    document.getElementById('editor-palette')!.addEventListener('click', (e) => {
+      const target = (e.target as HTMLElement).closest('.palette-piece');
+      if (!target) return;
+      const type = (target as HTMLElement).dataset.type as Piece['type'];
+      const side = (target as HTMLElement).dataset.side as Side;
+      this.editorBrush = { type, side };
+      this.updateEditorPaletteUI();
+    });
+    document.getElementById('btn-editor-erase')!.addEventListener('click', () => {
+      this.editorBrush = 'erase';
+      this.updateEditorPaletteUI();
+    });
   }
 
   private checkResumeState(): void {
@@ -230,7 +280,7 @@ class GameApp {
 
     try {
       const moves: Move[] = JSON.parse(resume.moveHistory);
-      this.mode = 'local-pvp';
+      this.mode = null; // 恢复查看模式，不关联任何对战模式
       this.mySide = resume.mySide as Side;
       this.board.reset();
       for (const move of moves) {
@@ -241,14 +291,22 @@ class GameApp {
       this.board.state.noCaptureCount = resume.noCaptureCount;
       this.board.state.capturedRed = JSON.parse(resume.capturedRed);
       this.board.state.capturedBlack = JSON.parse(resume.capturedBlack);
+      // 如果已终局，同步终局状态
+      if (this.board.state.gameOver) {
+        this.gameOverShown = true;
+      }
       Storage.clearResumeState(); // 加载成功后清除，避免重复恢复
+      // 进入只读查看模式
+      this.reviewIndex = this.board.state.moveHistory.length - 1;
       this.showScreen('game');
       this.updateGameInfo();
       this.renderBoard();
       this.updateCaptured();
       this.updateNotation();
+      document.getElementById('review-overlay')!.classList.remove('hidden');
     } catch {
       Storage.clearResumeState();
+      alert('恢复对局失败，记录可能已损坏');
     }
   }
 
@@ -331,6 +389,17 @@ class GameApp {
     this.selectedPos = null;
     this.validMoves = [];
     this.animator.stop();
+    this.editorBrush = null;
+    // 将 canvas 移回游戏区域（如果它在编辑器中）
+    if (this.editorCanvasParent && this.canvas.parentElement !== this.editorCanvasParent) {
+      this.editorCanvasParent.appendChild(this.canvas);
+    }
+    this.editorCanvasParent = null;
+    // 清空聊天消息和输入
+    const chatContainer = document.getElementById('chat-messages');
+    if (chatContainer) chatContainer.innerHTML = '';
+    const chatInput = document.getElementById('chat-input') as HTMLInputElement | null;
+    if (chatInput) chatInput.value = '';
     Storage.clearResumeState();
     this.showScreen('menu');
     this.loadSettings();
@@ -377,13 +446,25 @@ class GameApp {
     }
     container.innerHTML = history.map((h, i) => {
       const date = new Date(h.date).toLocaleString('zh-CN');
-      const modeText = h.mode === 'local-pvp' ? '本地双人' : h.mode === 'local-ai' ? '人机对战' : '联机对战';
+      const modeText = h.mode === 'local-pvp' ? '本地双人' : h.mode === 'local-ai' ? '人机对战' : h.mode === 'ai-vs-ai' ? 'AI观战' : '联机对战';
       const winnerText = h.winner === 'red' ? '红方胜' : h.winner === 'black' ? '黑方胜' : '和棋';
+      const canAnalyze = !!h.movesEncoded;
       return `<div class="history-item" data-index="${i}">
         <div class="history-meta">${date} · ${modeText} · ${winnerText}</div>
         <div class="history-moves">${h.moves.slice(0, 80)}${h.moves.length > 80 ? '...' : ''}</div>
+        <div class="history-actions">
+          <button class="btn-small btn-analysis" data-index="${i}" ${!canAnalyze ? 'disabled title="旧格式记录不支持分析"' : ''}>复盘分析</button>
+        </div>
       </div>`;
     }).join('');
+
+    container.querySelectorAll('.btn-analysis').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt((e.currentTarget as HTMLElement).dataset.index!, 10);
+        this.startAnalysisFromHistory(idx);
+      });
+    });
   }
 
   private restartGame(): void {
@@ -440,22 +521,32 @@ class GameApp {
     this.showScreen('puzzle');
     const container = document.getElementById('puzzle-list')!;
 
-    const categories = ['杀法', '巧胜', '和棋'];
+    const categories = ['杀法', '巧胜', '和棋', '自定义'];
     let html = '';
     for (const cat of categories) {
-      const items = ALL_PUZZLES.filter(p => p.category === cat);
+      const customPuzzles = cat === '自定义' ? Storage.loadCustomPuzzles() : [];
+      let items: Array<{ name: string; description: string; difficulty?: number; id?: string }> =
+        cat === '自定义' ? customPuzzles : ALL_PUZZLES.filter(p => p.category === cat);
       if (items.length === 0) continue;
       html += `<h3 class="puzzle-category">${cat} (${items.length}道)</h3>`;
       html += `<div class="puzzle-grid">`;
-      for (const p of items) {
-        const idx = ALL_PUZZLES.indexOf(p);
-        const stars = '★'.repeat(p.difficulty) + '☆'.repeat(3 - p.difficulty);
-        const best = Storage.getBestPuzzleRecord(idx);
+      for (let i = 0; i < items.length; i++) {
+        const p = items[i];
+        const idx = cat === '自定义' ? 1000 + i : ALL_PUZZLES.indexOf(p as (typeof ALL_PUZZLES)[0]);
+        const diff = (p as any).difficulty ?? 1;
+        const stars = '★'.repeat(diff) + '☆'.repeat(3 - diff);
+        const best = cat === '自定义' ? null : Storage.getBestPuzzleRecord(idx);
         const recordHtml = best
           ? `<span class="puzzle-best">最佳: ${best.steps}步 / ${(best.timeMs / 1000).toFixed(1)}秒</span>`
           : '';
+        const deleteBtn = cat === '自定义'
+          ? `<button class="puzzle-delete-btn" data-delete-id="${p.id}" title="删除">✕</button>`
+          : '';
         html += `<div class="puzzle-card" data-index="${idx}">
-          <div class="puzzle-name">${p.name}</div>
+          <div class="puzzle-card-header">
+            <div class="puzzle-name">${p.name}</div>
+            ${deleteBtn}
+          </div>
           <div class="puzzle-stars">${stars} ${recordHtml}</div>
           <div class="puzzle-desc">${p.description}</div>
         </div>`;
@@ -466,8 +557,21 @@ class GameApp {
 
     container.querySelectorAll('.puzzle-card').forEach(el => {
       el.addEventListener('click', (e) => {
+        // 点击删除按钮时不触发开始对局
+        if ((e.target as HTMLElement).closest('.puzzle-delete-btn')) return;
         const idx = parseInt((e.currentTarget as HTMLElement).dataset.index!, 10);
         this.startPuzzle(idx);
+      });
+    });
+
+    container.querySelectorAll('.puzzle-delete-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = (e.currentTarget as HTMLElement).dataset.deleteId!;
+        if (confirm('确定要删除这个自定义残局吗？')) {
+          Storage.deleteCustomPuzzle(id);
+          this.showPuzzles();
+        }
       });
     });
   }
@@ -492,20 +596,32 @@ class GameApp {
   }
 
   private startPuzzle(index: number): void {
-    const puzzle = ALL_PUZZLES[index];
-    if (!puzzle) return;
+    let board: (Piece | null)[][];
+    let side: 'red' | 'black';
+    if (index >= 1000) {
+      const custom = Storage.loadCustomPuzzles();
+      const p = custom[index - 1000];
+      if (!p) return;
+      board = p.board.map(row => row.map(cell => cell ? { type: cell.type as Piece['type'], side: cell.side as Side } : null));
+      side = p.side as 'red' | 'black';
+    } else {
+      const p = ALL_PUZZLES[index];
+      if (!p) return;
+      board = p.board.map(row => [...row]);
+      side = p.side;
+    }
 
-    this.mode = 'local-ai' as GameMode;
+    this.mode = 'local-ai';
     this.currentPuzzleIndex = index;
     this.puzzleStartTime = performance.now();
-    this.board.loadCustomBoard(puzzle.board, puzzle.side);
+    this.board.loadCustomBoard(board, side);
     this.notation.clear();
     this.selectedPos = null;
     this.validMoves = [];
     this.animator.stop();
-    const aiSide = puzzle.side === 'red' ? 'black' : 'red';
+    const aiSide = side === 'red' ? 'black' : 'red';
     this.ai = new AI(aiSide, this.difficulty);
-    this.mySide = puzzle.side;
+    this.mySide = side;
 
     this.showScreen('game');
     this.updateGameInfo();
@@ -540,15 +656,18 @@ class GameApp {
 
   private startAiVsAiLoop(): void {
     const speed = parseInt((document.getElementById('ai-speed') as HTMLInputElement).value, 10);
-    this.aiVsAiInterval = setInterval(() => {
-      if (this.board.state.gameOver) {
+    const step = () => {
+      if (!this.aiVsAiInterval || this.board.state.gameOver) {
         this.stopAiVsAi();
         return;
       }
 
       const side = this.board.state.currentSide;
       const ai = side === 'red' ? this.aiRed : this.aiBlack;
-      if (!ai) return;
+      if (!ai) {
+        this.aiVsAiInterval = setTimeout(step, speed);
+        return;
+      }
 
       const result = ai.getMove(this.board);
       const move = result.move;
@@ -570,8 +689,14 @@ class GameApp {
         this.updateGameInfo();
         this.renderBoard();
         this.stopAiVsAi();
+        return;
       }
-    }, speed);
+
+      if (!this.board.state.gameOver) {
+        this.aiVsAiInterval = setTimeout(step, speed);
+      }
+    };
+    this.aiVsAiInterval = setTimeout(step, speed);
   }
 
   private toggleAiPause(): void {
@@ -586,8 +711,206 @@ class GameApp {
 
   private stopAiVsAi(): void {
     if (this.aiVsAiInterval) {
-      clearInterval(this.aiVsAiInterval);
+      clearTimeout(this.aiVsAiInterval);
       this.aiVsAiInterval = null;
+    }
+  }
+
+  // ==================== 摆盘模式 ====================
+
+  private showEditor(): void {
+    this.mode = 'editor';
+    this.editorBoard = createStandardBoard();
+    this.editorSide = 'red';
+    this.editorBrush = null;
+    this.selectedPos = null;
+    this.validMoves = [];
+
+    // 移动 canvas 到编辑器区域
+    this.editorCanvasParent = this.canvas.parentElement;
+    const wrapper = document.getElementById('editor-board-wrapper')!;
+    wrapper.appendChild(this.canvas);
+
+    this.showScreen('editor');
+    this.renderEditorPalette();
+    this.updateEditorPaletteUI();
+    this.updateEditorSideUI();
+    this.renderEditorBoard();
+    this.validateEditor();
+  }
+
+  private exitEditor(): void {
+    // 将 canvas 移回游戏区域
+    if (this.editorCanvasParent) {
+      this.editorCanvasParent.appendChild(this.canvas);
+      this.editorCanvasParent = null;
+    }
+    this.mode = null;
+    this.editorBrush = null;
+    this.showScreen('menu');
+    this.renderBoard();
+  }
+
+  private renderEditorBoard(): void {
+    // 构造临时 GameState 用于渲染
+    const state = this.createEditorGameState();
+    this.renderer.render(state, null, []);
+  }
+
+  private createEditorGameState() {
+    return {
+      board: this.editorBoard,
+      currentSide: this.editorSide,
+      moveHistory: [],
+      capturedRed: [],
+      capturedBlack: [],
+      gameOver: false,
+      winner: null,
+      check: false,
+      noCaptureCount: 0,
+    };
+  }
+
+  private renderEditorPalette(): void {
+    const palette = document.getElementById('editor-palette')!;
+    let html = '';
+    for (const p of BRUSH_PIECES) {
+      const colorClass = p.side === 'red' ? 'red' : 'black';
+      html += `<button class="piece-brush ${colorClass}" data-type="${p.type}" data-side="${p.side}">${p.label}</button>`;
+    }
+    palette.innerHTML = html;
+  }
+
+  private updateEditorPaletteUI(): void {
+    document.querySelectorAll('.piece-brush').forEach(el => {
+      const btn = el as HTMLElement;
+      const isSelected = this.editorBrush && this.editorBrush !== 'erase' &&
+        btn.dataset.type === (this.editorBrush as Piece).type &&
+        btn.dataset.side === (this.editorBrush as Piece).side;
+      btn.classList.toggle('active', !!isSelected);
+    });
+    const eraseBtn = document.getElementById('btn-editor-erase')!;
+    eraseBtn.classList.toggle('active', this.editorBrush === 'erase');
+  }
+
+  private updateEditorSideUI(): void {
+    document.getElementById('btn-editor-side-red')!.classList.toggle('active', this.editorSide === 'red');
+    document.getElementById('btn-editor-side-black')!.classList.toggle('active', this.editorSide === 'black');
+  }
+
+  private validateEditor(): void {
+    const result = validateBoard(this.editorBoard);
+    const el = document.getElementById('editor-validation')!;
+    if (result.valid) {
+      el.className = 'editor-validation ok';
+      el.textContent = '✓ 局面合法';
+    } else {
+      el.className = 'editor-validation error';
+      el.innerHTML = result.errors.map(e => `<div>✗ ${e}</div>`).join('');
+    }
+  }
+
+  private saveCustomPuzzle(): void {
+    const result = validateBoard(this.editorBoard);
+    if (!result.valid) {
+      alert('局面不合法，无法保存：\n' + result.errors.join('\n'));
+      return;
+    }
+    const name = prompt('请输入残局名称：', '自定义残局');
+    if (!name) return;
+    const boardForStorage = this.editorBoard.map(row =>
+      row.map(p => p ? { type: p.type, side: p.side } : null)
+    );
+    const puzzle = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name,
+      description: '用户自定义残局',
+      board: boardForStorage,
+      side: this.editorSide,
+      createdAt: new Date().toISOString(),
+    };
+    const puzzles = Storage.loadCustomPuzzles();
+    puzzles.push(puzzle);
+    Storage.saveCustomPuzzles(puzzles);
+    alert('保存成功！');
+  }
+
+  private importFenEditor(): void {
+    const fen = prompt('请输入 FEN 字符串：');
+    if (!fen) return;
+    try {
+      const decoded = FenCodec.decode(fen);
+      if (!decoded) {
+        alert('FEN 解析失败：格式错误');
+        return;
+      }
+      this.editorBoard = decoded.board;
+      this.editorSide = decoded.side;
+      this.renderEditorBoard();
+      this.updateEditorSideUI();
+      this.validateEditor();
+    } catch (e) {
+      alert('FEN 解析失败：' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  private importFromCurrentGame(): void {
+    // 从当前 board state 导入到编辑器
+    this.editorBoard = this.board.state.board.map(row => [...row]);
+    this.editorSide = this.board.state.currentSide;
+    this.editorBrush = null;
+    this.selectedPos = null;
+    this.validMoves = [];
+    this.renderEditorBoard();
+    this.updateEditorSideUI();
+    this.updateEditorPaletteUI();
+    this.validateEditor();
+  }
+
+  private exportFenEditor(): void {
+    try {
+      const boardFen = FenCodec.encode(this.editorBoard);
+      const sidePart = this.editorSide === 'black' ? 'b' : 'r';
+      const fen = `${boardFen} ${sidePart}`;
+      navigator.clipboard.writeText(fen).then(() => alert('FEN 已复制到剪贴板'));
+    } catch (e) {
+      alert('FEN 导出失败');
+    }
+  }
+
+  private startFromEditor(): void {
+    const result = validateBoard(this.editorBoard);
+    if (!result.valid) {
+      alert('局面不合法，无法开始对局：\n' + result.errors.join('\n'));
+      return;
+    }
+    // 将 canvas 移回游戏区域
+    if (this.editorCanvasParent) {
+      this.editorCanvasParent.appendChild(this.canvas);
+      this.editorCanvasParent = null;
+    }
+    this.mode = 'local-ai';
+    this.currentPuzzleIndex = null;
+    this.hintMove = null;
+    this.gameOverShown = false;
+    this.reviewIndex = null;
+    this.board.loadCustomBoard(this.editorBoard.map(row => [...row]), this.editorSide);
+    this.notation.clear();
+    this.selectedPos = null;
+    this.validMoves = [];
+    this.animator.stop();
+    const aiSide = this.editorSide === 'red' ? 'black' : 'red';
+    this.ai = new AI(aiSide, this.difficulty);
+    this.mySide = this.editorSide;
+
+    this.showScreen('game');
+    this.updateGameInfo();
+    this.renderBoard();
+    this.updateCaptured();
+    this.updateNotation();
+
+    if (this.board.state.currentSide === aiSide) {
+      this.checkAI();
     }
   }
 
@@ -622,6 +945,9 @@ class GameApp {
       this.applyHandicap();
     } else if (mode === 'lan-host') {
       this.mySide = 'red';
+      // 红方恢复用户设置的翻转状态
+      this.renderer.setFlipped(this.savedSettings.flipped);
+      (document.getElementById('flip-toggle') as HTMLInputElement).checked = this.savedSettings.flipped;
     } else if (mode === 'lan-join') {
       this.mySide = 'black';
       // 黑方自动翻转棋盘
@@ -710,11 +1036,25 @@ class GameApp {
 
   private onP2PMessage(data: string): void {
     const msg = parseMessage(data);
+    if (msg.type === 'invalid') {
+      console.warn('Received invalid message:', data.slice(0, 200));
+      return;
+    }
     if (msg.type === 'move') {
       try {
         const move: Move = JSON.parse(msg.payload);
+        // 基本结构校验
+        if (!this.isValidMoveShape(move)) {
+          console.error('Invalid move shape:', move);
+          this.showSystemChat('对方发送了格式错误的走子数据');
+          return;
+        }
         const ok = this.board.applyExternalMove(move);
-        if (!ok) return;
+        if (!ok) {
+          console.error('Illegal move rejected:', move);
+          this.showSystemChat('对方发送了非法走子，已拒绝');
+          return;
+        }
         this.notation.record(move);
         this.selectedPos = null;
         this.validMoves = [];
@@ -729,6 +1069,7 @@ class GameApp {
         this.saveResumeState();
       } catch (e) {
         console.error('Invalid move data:', e);
+        this.showSystemChat('收到无法解析的走子数据');
       }
     } else if (msg.type === 'chat') {
       this.receiveChat(msg.payload, false);
@@ -743,11 +1084,39 @@ class GameApp {
     }
   }
 
+  private isValidMoveShape(move: unknown): move is Move {
+    if (!move || typeof move !== 'object') return false;
+    const m = move as Record<string, unknown>;
+    if (!m.from || !m.to || !m.piece) return false;
+    const from = m.from as Record<string, unknown>;
+    const to = m.to as Record<string, unknown>;
+    const piece = m.piece as Record<string, unknown>;
+    if (typeof from.x !== 'number' || typeof from.y !== 'number') return false;
+    if (typeof to.x !== 'number' || typeof to.y !== 'number') return false;
+    if (typeof piece.type !== 'string' || typeof piece.side !== 'string') return false;
+    if (from.x < 0 || from.x > 8 || from.y < 0 || from.y > 9) return false;
+    if (to.x < 0 || to.x > 8 || to.y < 0 || to.y > 9) return false;
+    return true;
+  }
+
+  private showSystemChat(text: string): void {
+    const container = document.getElementById('chat-messages')!;
+    const div = document.createElement('div');
+    div.className = 'chat-msg system';
+    div.innerHTML = `<div class="sender" style="color:#f1c40f">系统</div><div>${this.escapeHtml(text)}</div>`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
   private onP2PStateChange(state: 'connecting' | 'connected' | 'disconnected'): void {
     const status = document.getElementById('lan-status')!;
     if (state === 'connected') {
       status.textContent = '连接成功！即将进入游戏...';
-      setTimeout(() => this.startGame(this.mode === 'lan-host' ? 'lan-host' : 'lan-join'), 500);
+      setTimeout(() => {
+        if (this.p2p?.isConnected()) {
+          this.startGame(this.mode === 'lan-host' ? 'lan-host' : 'lan-join');
+        }
+      }, 500);
     } else if (state === 'disconnected') {
       status.textContent = '连接已断开';
       if (this.screens.game.classList.contains('active')) {
@@ -800,6 +1169,20 @@ class GameApp {
   }
 
   private handleBoardClick(x: number, y: number): void {
+    // 编辑器模式：放置/擦除棋子
+    if (this.mode === 'editor') {
+      const pos = this.renderer.toBoard(x, y);
+      if (!pos) return;
+      if (this.editorBrush === 'erase') {
+        this.editorBoard[pos.y][pos.x] = null;
+      } else if (this.editorBrush) {
+        this.editorBoard[pos.y][pos.x] = this.editorBrush;
+      }
+      this.renderEditorBoard();
+      this.validateEditor();
+      return;
+    }
+
     if (this.mode === 'ai-vs-ai') return; // AI观战模式禁止下棋
     if (this.reviewIndex !== null) return; // 回放模式禁止下棋
     if (this.board.state.gameOver) return;
@@ -863,8 +1246,11 @@ class GameApp {
     }
     this.playMoveSound(move);
 
-    if (this.mode?.startsWith('lan-') && this.p2p?.isConnected()) {
-      this.p2p.send(wrapMessage('move', JSON.stringify(move)));
+    if (this.mode?.startsWith('lan-') && this.p2p) {
+      const sent = this.p2p.send(wrapMessage('move', JSON.stringify(move)));
+      if (!sent) {
+        this.showSystemChat('走子数据发送失败，对方可能未收到');
+      }
     }
 
     this.saveResumeState();
@@ -905,6 +1291,34 @@ class GameApp {
         this.updateCaptured();
         this.updateNotation();
         this.playMoveSound(aiMove);
+      } else {
+        // AI 无合法走法：触发终局检测，或尝试快速重搜
+        const currentSide = this.board.state.currentSide;
+        if (!Rules.hasLegalMoves(this.board.state.board, currentSide)) {
+          this.board.state.gameOver = true;
+          this.board.state.winner = currentSide === 'red' ? 'black' : 'red';
+          this.updateGameInfo();
+          this.renderBoard();
+        } else {
+          // AI 超时未找到走法，但有合法走法：使用快速引擎搜索保底
+          try {
+            const engine = new Engine(currentSide);
+            engine.setTimeLimit(500);
+            const fallback = engine.search(this.board.state.board, 3);
+            if (fallback.move) {
+              this.board.makeMove(fallback.move.from, fallback.move.to);
+              this.notation.record(fallback.move);
+              this.animator.animate(fallback.move.piece, fallback.move.from, fallback.move.to, 180);
+              this.renderBoard();
+              this.updateGameInfo();
+              this.updateCaptured();
+              this.updateNotation();
+              this.playMoveSound(fallback.move);
+            }
+          } catch {
+            // 快速搜索也失败，静默处理等待下次调用
+          }
+        }
       }
       this.isThinking = false;
       this.updateGameInfo();
@@ -958,6 +1372,7 @@ class GameApp {
     this.updateCaptured();
     this.updateNotation();
     document.getElementById('review-overlay')!.classList.remove('hidden');
+    this.resetAnalysisPanel();
   }
 
   private returnToGame(): void {
@@ -976,6 +1391,7 @@ class GameApp {
     this.validMoves = [];
     this.animator.stop();
     document.getElementById('review-overlay')!.classList.add('hidden');
+    this.resetAnalysisPanel();
     this.renderBoard();
     this.updateGameInfo();
     this.updateCaptured();
@@ -988,6 +1404,146 @@ class GameApp {
     const newIndex = this.reviewIndex + delta;
     if (newIndex < 0 || newIndex >= entries.length) return;
     this.jumpToMove(newIndex);
+  }
+
+  // ==================== 复盘分析 ====================
+
+  private startAnalysisFromCurrentGame(): void {
+    if (this.board.state.moveHistory.length === 0) {
+      alert('当前对局没有可走记录');
+      return;
+    }
+    this.mode = null;
+    this.isThinking = false;
+    this.reviewIndex = this.board.state.moveHistory.length - 1;
+    this.showScreen('game');
+    this.updateGameInfo();
+    this.renderBoard();
+    this.updateCaptured();
+    this.updateNotation();
+    document.getElementById('review-overlay')!.classList.remove('hidden');
+    this.resetAnalysisPanel();
+  }
+
+  private startAnalysisFromHistory(index: number): void {
+    const history = Storage.loadHistory();
+    const entry = history[index];
+    if (!entry) return;
+    if (!entry.movesEncoded) {
+      alert('该历史记录不支持复盘分析（旧格式记录）');
+      return;
+    }
+
+    // 重建棋局
+    this.board.reset();
+    this.notation.clear();
+    const moves = MoveCodec.decode(entry.movesEncoded, this.board.state.board);
+    for (const move of moves) {
+      this.board.applyExternalMove(move);
+      this.notation.record(move);
+    }
+
+    this.mode = null;
+    this.mySide = null;
+    this.currentPuzzleIndex = null;
+    this.gameOverShown = false;
+    this.isThinking = false;
+    this.reviewIndex = moves.length - 1;
+
+    this.showScreen('game');
+    this.updateGameInfo();
+    this.renderBoard();
+    this.updateCaptured();
+    this.updateNotation();
+    document.getElementById('review-overlay')!.classList.remove('hidden');
+    this.resetAnalysisPanel();
+  }
+
+  private async analyzeCurrentPosition(): Promise<void> {
+    const loading = document.getElementById('analysis-loading')!;
+    const scoreEl = document.getElementById('analysis-score')!;
+    const verdictEl = document.getElementById('analysis-verdict')!;
+    const suggestionEl = document.getElementById('analysis-suggestion')!;
+
+    loading.classList.remove('hidden');
+    scoreEl.textContent = '--';
+    verdictEl.textContent = 'AI 正在思考...';
+    suggestionEl.textContent = '';
+
+    try {
+      const engine = new Engine(this.board.state.currentSide);
+      engine.setTimeLimit(2000);
+      const result = engine.search(this.board.state.board, 5);
+      const score = result.score;
+
+      // 分数显示（红方视角）
+      let displayScore = score;
+      let scoreText: string;
+      let verdict: string;
+      let scoreClass: string;
+
+      if (Math.abs(score) > 9000) {
+        scoreText = score > 0 ? '红胜势' : '黑胜势';
+        verdict = score > 0 ? '红方即将获胜' : '黑方即将获胜';
+        scoreClass = score > 0 ? 'red-adv' : 'black-adv';
+      } else if (score > 300) {
+        scoreText = `+${score}`;
+        verdict = '红方明显优势';
+        scoreClass = 'red-adv';
+      } else if (score < -300) {
+        scoreText = `${score}`;
+        verdict = '黑方明显优势';
+        scoreClass = 'black-adv';
+      } else if (score > 80) {
+        scoreText = `+${score}`;
+        verdict = '红方稍优';
+        scoreClass = 'red-adv';
+      } else if (score < -80) {
+        scoreText = `${score}`;
+        verdict = '黑方稍优';
+        scoreClass = 'black-adv';
+      } else {
+        scoreText = `${score > 0 ? '+' : ''}${score}`;
+        verdict = '双方均势';
+        scoreClass = 'even';
+      }
+
+      scoreEl.textContent = scoreText;
+      scoreEl.className = `analysis-score ${scoreClass}`;
+      verdictEl.textContent = verdict;
+
+      if (result.move) {
+        const side = this.board.state.currentSide;
+        const pieceName = PIECE_NAMES[side][result.move.piece.type];
+        const fromFile = side === 'red' ? 9 - result.move.from.x : result.move.from.x + 1;
+        const toFile = side === 'red' ? 9 - result.move.to.x : result.move.to.x + 1;
+        const action = result.move.from.x === result.move.to.x
+          ? (result.move.to.y > result.move.from.y ? '进' : '退')
+          : '平';
+        const targetNum = action === '平' ? toFile : Math.abs(
+          (side === 'red' ? 10 - result.move.to.y : result.move.to.y + 1) -
+          (side === 'red' ? 10 - result.move.from.y : result.move.from.y + 1)
+        );
+        suggestionEl.textContent = `推荐：${pieceName}${fromFile}${action}${targetNum}`;
+      } else {
+        suggestionEl.textContent = '无合法走法';
+      }
+    } catch (e) {
+      verdictEl.textContent = '分析出错，请重试';
+      console.error('Analysis error:', e);
+    } finally {
+      loading.classList.add('hidden');
+    }
+  }
+
+  private resetAnalysisPanel(): void {
+    const scoreEl = document.getElementById('analysis-score')!;
+    const verdictEl = document.getElementById('analysis-verdict')!;
+    const suggestionEl = document.getElementById('analysis-suggestion')!;
+    scoreEl.textContent = '--';
+    scoreEl.className = 'analysis-score';
+    verdictEl.textContent = '点击分析按钮查看AI建议';
+    suggestionEl.textContent = '';
   }
 
   private onStateChange(): void {
@@ -1066,6 +1622,14 @@ class GameApp {
       chatPanel.classList.add('hidden');
     }
 
+    // 复盘分析面板
+    const analysisPanel = document.getElementById('analysis-panel')!;
+    if (this.reviewIndex !== null) {
+      analysisPanel.classList.remove('hidden');
+    } else {
+      analysisPanel.classList.add('hidden');
+    }
+
     const aiControl = document.getElementById('ai-control')!;
     if (this.mode === 'ai-vs-ai') {
       aiControl.classList.remove('hidden');
@@ -1086,7 +1650,7 @@ class GameApp {
     btnDraw.classList.toggle('hidden', !isLan || state.gameOver);
     btnResign.classList.toggle('hidden', !isLan || state.gameOver);
 
-    if (state.gameOver) {
+    if (state.gameOver && this.reviewIndex === null) {
       this.stopTimer();
       if (state.winner) {
         turnEl.textContent = state.winner === 'red' ? '红方胜利' : '黑方胜利';
@@ -1109,19 +1673,29 @@ class GameApp {
       }
       statusEl.textContent = '游戏结束';
     } else {
-      if (this.isThinking) {
+      if (state.gameOver) {
+        // 复盘模式下显示终局信息（不弹窗）
+        if (state.winner) {
+          turnEl.textContent = state.winner === 'red' ? '红方胜利' : '黑方胜利';
+          turnEl.style.color = state.winner === 'red' ? '#e74c3c' : '#3498db';
+        } else {
+          turnEl.textContent = '和棋';
+          turnEl.style.color = '#aaa';
+        }
+        statusEl.textContent = '游戏结束';
+      } else if (this.isThinking) {
         turnEl.textContent = '电脑思考中...';
         turnEl.style.color = '#aaa';
       } else {
         turnEl.textContent = state.currentSide === 'red' ? '红方回合' : '黑方回合';
         turnEl.style.color = state.currentSide === 'red' ? '#e74c3c' : '#3498db';
       }
-      if (state.check) {
+      if (!state.gameOver && state.check) {
         statusEl.textContent = '将军！';
-      } else if (state.noCaptureCount >= 100) {
+      } else if (!state.gameOver && state.noCaptureCount >= 100) {
         const remaining = 120 - state.noCaptureCount;
         statusEl.textContent = `和棋倒计时 ${remaining}`;
-      } else {
+      } else if (!state.gameOver) {
         statusEl.textContent = '';
       }
     }
@@ -1158,9 +1732,15 @@ class GameApp {
       );
     }
     this.notationEl.innerHTML = html.join('');
-    // 回放模式下不自动滚动到底部
     if (this.reviewIndex === null) {
+      // 正常模式下滚动到底部
       this.notationEl.scrollTop = this.notationEl.scrollHeight;
+    } else {
+      // 回放/分析模式下滚动到当前步
+      const activeEl = this.notationEl.querySelector('.red-move.active, .black-move.active');
+      if (activeEl) {
+        (activeEl as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   }
 
@@ -1215,6 +1795,7 @@ class GameApp {
     this.animator.stop();
     this.mode = 'local-pvp';
     this.mySide = null;
+    this.reviewIndex = null;
     // 检测导入局面是否已终局
     const currentSide = this.board.state.currentSide;
     if (!Rules.hasLegalMoves(this.board.state.board, currentSide)) {
@@ -1297,10 +1878,20 @@ class GameApp {
 
   private requestDraw(): void {
     if (this.board.state.gameOver) return;
+    if (this.reviewIndex !== null) {
+      alert('复盘模式下不支持和棋');
+      return;
+    }
     if (this.mode?.startsWith('lan-')) {
-      if (this.p2p?.isConnected()) {
-        this.p2p.send(wrapMessage('draw-request', ''));
+      if (!this.p2p?.isConnected()) {
+        alert('当前未连接，无法发送和棋请求');
+        return;
+      }
+      const sent = this.p2p.send(wrapMessage('draw-request', ''));
+      if (sent) {
         alert('已发送和棋请求，等待对方回应...');
+      } else {
+        alert('和棋请求发送失败，请检查连接');
       }
     } else {
       // 单机模式直接和棋
@@ -1313,10 +1904,14 @@ class GameApp {
   private handleDrawRequest(): void {
     if (this.board.state.gameOver) return;
     if (confirm('对方请求和棋，是否同意？')) {
-      this.p2p?.send(wrapMessage('draw-accept', ''));
+      if (this.p2p?.isConnected()) {
+        this.p2p.send(wrapMessage('draw-accept', ''));
+      }
       this.acceptDraw();
     } else {
-      this.p2p?.send(wrapMessage('draw-decline', ''));
+      if (this.p2p?.isConnected()) {
+        this.p2p.send(wrapMessage('draw-decline', ''));
+      }
     }
   }
 
@@ -1335,7 +1930,8 @@ class GameApp {
     const moves = this.notation.exportText();
     const mode = this.mode || 'local-pvp';
     const winner = this.board.state.winner;
-    Storage.addHistory(moves, mode, winner);
+    const movesEncoded = MoveCodec.encode(this.board.state.moveHistory);
+    Storage.addHistory(moves, mode, winner, movesEncoded);
 
     // 保存残局成绩
     if (this.currentPuzzleIndex !== null && winner === this.mySide) {

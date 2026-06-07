@@ -201,6 +201,13 @@ export class Engine {
                 }
             }
         }
+        // 保底：如果超时导致 bestMove 为 null，回退到第一个合法走法
+        if (!bestMove && this.stopSearch) {
+            const fallbackMoves = this.getAllLegalMoves(board, this.side);
+            if (fallbackMoves.length > 0) {
+                bestMove = fallbackMoves[0];
+            }
+        }
         const timeMs = performance.now() - this.startTime;
         return { move: bestMove, score: bestScore, nodes: this.nodesSearched, depth: lastCompletedDepth, timeMs };
     }
@@ -293,12 +300,40 @@ export class Engine {
                 if (piece && piece.side === side) {
                     for (let ty = 0; ty < 10; ty++) {
                         for (let tx = 0; tx < 9; tx++) {
+                            if (this.shouldStop())
+                                return moves;
                             const from = { x, y };
                             const to = { x: tx, y: ty };
                             if (Rules.isValidMove(board, from, to)) {
                                 if (!Rules.wouldBeInCheck(board, from, to, side)) {
                                     const captured = board[ty][tx] || undefined;
                                     moves.push({ from, to, piece, captured });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return moves;
+    }
+    getCaptureMoves(board, side) {
+        const moves = [];
+        for (let y = 0; y < 10; y++) {
+            for (let x = 0; x < 9; x++) {
+                const piece = board[y][x];
+                if (piece && piece.side === side) {
+                    for (let ty = 0; ty < 10; ty++) {
+                        for (let tx = 0; tx < 9; tx++) {
+                            if (this.shouldStop())
+                                return moves;
+                            if (!board[ty][tx] || board[ty][tx].side === side)
+                                continue;
+                            const from = { x, y };
+                            const to = { x: tx, y: ty };
+                            if (Rules.isValidMove(board, from, to)) {
+                                if (!Rules.wouldBeInCheck(board, from, to, side)) {
+                                    moves.push({ from, to, piece, captured: board[ty][tx] });
                                 }
                             }
                         }
@@ -374,7 +409,7 @@ export class Engine {
         if (qDepth >= 8)
             return isMaximizing ? alpha : beta;
         const side = isMaximizing ? this.side : (this.side === 'red' ? 'black' : 'red');
-        const moves = this.getAllLegalMoves(board, side).filter(m => m.captured);
+        const moves = this.getCaptureMoves(board, side);
         for (const move of moves) {
             if (this.shouldStop())
                 break;
