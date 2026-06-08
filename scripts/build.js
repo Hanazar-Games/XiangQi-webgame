@@ -31,13 +31,16 @@ console.log('Post-build: copying static assets to dist/...');
 // 1. Copy CSS
 copyFile('css/style.css', 'dist/css/style.css');
 
-// 2. Copy manifest
+// 2. Copy manifest & favicon
 copyFile('manifest.json', 'dist/manifest.json');
+if (fs.existsSync('favicon.ico')) {
+  copyFile('favicon.ico', 'dist/favicon.ico');
+}
 
 // 3. Build dist/index.html with corrected paths
 let indexHtml = fs.readFileSync('index.html', 'utf8');
-// Remove any existing favicon links (we'll add a proper one below)
-indexHtml = indexHtml.replace(/<link rel="icon"[^>]*>\n?/gi, '');
+// Remove any existing favicon links (we'll add proper ones below)
+indexHtml = indexHtml.replace(/<link rel="(icon|alternate icon)"[^>]*>\n?/gi, '');
 // Fix asset paths for dist/ directory
 indexHtml = indexHtml.replace(
   'href="css/style.css"',
@@ -55,11 +58,12 @@ indexHtml = indexHtml.replace(
   "register('sw.js')",
   "register('./sw.js')"
 );
-// Add inline SVG favicon (prevents 404 for favicon.ico)
-const faviconLink = '  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' rx=\'20\' fill=\'%23e8c895\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'35\' fill=\'%23fff\' stroke=\'%23c84b31\' stroke-width=\'4\'/%3E%3Ctext x=\'50\' y=\'58\' font-size=\'40\' text-anchor=\'middle\' fill=\'%23c84b31\' font-family=\'serif\'%3E帅%3C/text%3E%3C/svg%3E">\n';
+// Add favicon links (inline SVG + ICO fallback)
+const faviconSvg = '  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'%3E%3Crect width=\'100\' height=\'100\' rx=\'20\' fill=\'%23e8c895\'/%3E%3Ccircle cx=\'50\' cy=\'50\' r=\'35\' fill=\'%23fff\' stroke=\'%23c84b31\' stroke-width=\'4\'/%3E%3Ctext x=\'50\' y=\'58\' font-size=\'40\' text-anchor=\'middle\' fill=\'%23c84b31\' font-family=\'serif\'%3E帅%3C/text%3E%3C/svg%3E">\n';
+const faviconIco = '  <link rel="alternate icon" type="image/x-icon" href="./favicon.ico">\n';
 indexHtml = indexHtml.replace(
   '<title>',
-  faviconLink + '  <title>'
+  faviconSvg + faviconIco + '  <title>'
 );
 writeFile('dist/index.html', indexHtml);
 

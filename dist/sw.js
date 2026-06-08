@@ -1,7 +1,8 @@
-const CACHE_NAME = 'xiangqi-v1';
+const CACHE_NAME = 'xiangqi-v2';
 const ASSETS = [
   './',
   './index.html',
+  './manifest.json',
   './css/style.css',
   './main.js',
   './game/ai.js',
@@ -27,7 +28,21 @@ const ASSETS = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // 逐个缓存，避免单个404导致全部失败
+      for (const url of ASSETS) {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            await cache.put(url, response);
+          } else {
+            console.warn('[SW] Failed to cache (status ' + response.status + '):', url);
+          }
+        } catch (err) {
+          console.warn('[SW] Failed to fetch:', url, err);
+        }
+      }
+    })
   );
   self.skipWaiting();
 });
