@@ -4,6 +4,7 @@
   "description": "中国象棋 WebGame - 支持单机和局域网联机",
   "scripts": {
     "build": "tsc && node scripts/build.js",
+    "verify": "node scripts/verify.js",
     "watch": "tsc -w",
     "serve": "python3 -m http.server 8080 || python -m http.server 8080"
   },
