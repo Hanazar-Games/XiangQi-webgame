@@ -201,6 +201,34 @@ class GameApp {
                 this.jumpToMove(idx);
             }
         });
+        // 历史对局列表事件委托（只绑定一次）
+        document.getElementById('history-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-analysis');
+            if (!btn || btn.disabled)
+                return;
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.index, 10);
+            this.startAnalysisFromHistory(idx);
+        });
+        // 残局列表事件委托（只绑定一次）
+        document.getElementById('puzzle-list').addEventListener('click', (e) => {
+            const target = e.target;
+            const deleteBtn = target.closest('.puzzle-delete-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
+                const id = deleteBtn.dataset.deleteId;
+                if (confirm('确定要删除这个自定义残局吗？')) {
+                    Storage.deleteCustomPuzzle(id);
+                    this.showPuzzles();
+                }
+                return;
+            }
+            const card = target.closest('.puzzle-card');
+            if (card) {
+                const idx = parseInt(card.dataset.index, 10);
+                this.startPuzzle(idx);
+            }
+        });
         // 摆盘模式事件
         document.getElementById('btn-editor').addEventListener('click', () => this.showEditor());
         document.getElementById('btn-editor-back').addEventListener('click', () => this.exitEditor());
@@ -264,6 +292,7 @@ class GameApp {
             this.board.state.noCaptureCount = resume.noCaptureCount;
             this.board.state.capturedRed = JSON.parse(resume.capturedRed);
             this.board.state.capturedBlack = JSON.parse(resume.capturedBlack);
+            this.board.state.check = Rules.isInCheck(this.board.state.board, this.board.state.currentSide);
             // 如果已终局，同步终局状态
             if (this.board.state.gameOver) {
                 this.gameOverShown = true;
@@ -426,13 +455,7 @@ class GameApp {
         </div>
       </div>`;
         }).join('');
-        container.querySelectorAll('.btn-analysis').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const idx = parseInt(e.currentTarget.dataset.index, 10);
-                this.startAnalysisFromHistory(idx);
-            });
-        });
+        // 事件委托已在构造函数中绑定
     }
     restartGame() {
         if (!this.mode)
@@ -521,25 +544,7 @@ class GameApp {
             html += `</div>`;
         }
         container.innerHTML = html;
-        container.querySelectorAll('.puzzle-card').forEach(el => {
-            el.addEventListener('click', (e) => {
-                // 点击删除按钮时不触发开始对局
-                if (e.target.closest('.puzzle-delete-btn'))
-                    return;
-                const idx = parseInt(e.currentTarget.dataset.index, 10);
-                this.startPuzzle(idx);
-            });
-        });
-        container.querySelectorAll('.puzzle-delete-btn').forEach(el => {
-            el.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const id = e.currentTarget.dataset.deleteId;
-                if (confirm('确定要删除这个自定义残局吗？')) {
-                    Storage.deleteCustomPuzzle(id);
-                    this.showPuzzles();
-                }
-            });
-        });
+        // 事件委托已在构造函数中绑定
     }
     applyHandicap() {
         if (this.handicap === 'none')
@@ -842,6 +847,7 @@ class GameApp {
         this.hintMove = null;
         this.gameOverShown = false;
         this.reviewIndex = null;
+        this.notation.clear();
         this.board.loadCustomBoard(this.editorBoard.map(row => [...row]), this.editorSide);
         this.notation.clear();
         this.selectedPos = null;
@@ -1354,6 +1360,9 @@ class GameApp {
         this.mode = null;
         this.isThinking = false;
         this.reviewIndex = this.board.state.moveHistory.length - 1;
+        this.selectedPos = null;
+        this.validMoves = [];
+        this.animator.stop();
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
@@ -1387,6 +1396,9 @@ class GameApp {
         this.gameOverShown = false;
         this.isThinking = false;
         this.reviewIndex = moves.length - 1;
+        this.selectedPos = null;
+        this.validMoves = [];
+        this.animator.stop();
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
