@@ -52,7 +52,10 @@ npx serve .
 ```bash
 npm install
 npm run build
+npm run verify   # 自动检查所有资源是否存在、Service Worker 缓存是否完整、HTTP 层面是否有 404
 ```
+
+> 提交前务必运行 `npm run build`，并确保 `dist/` 目录的变更已一起提交。
 
 ## 部署到 GitHub Pages
 
