@@ -67,6 +67,11 @@ class GameApp {
         this.setupKeyboardShortcuts();
         this.checkResumeState();
         this.renderBoard();
+        window.addEventListener('resize', () => {
+            if (this.renderer.handleResize()) {
+                this.renderBoard();
+            }
+        });
     }
     setupEventListeners() {
         // 菜单
@@ -633,7 +638,7 @@ class GameApp {
             const side = this.board.state.currentSide;
             const ai = side === 'red' ? this.aiRed : this.aiBlack;
             if (!ai) {
-                this.aiVsAiInterval = setTimeout(step, speed);
+                this.stopAiVsAi();
                 return;
             }
             const result = ai.getMove(this.board);
@@ -825,7 +830,7 @@ class GameApp {
             const boardFen = FenCodec.encode(this.editorBoard);
             const sidePart = this.editorSide === 'black' ? 'b' : 'r';
             const fen = `${boardFen} ${sidePart}`;
-            navigator.clipboard.writeText(fen).then(() => alert('FEN 已复制到剪贴板'));
+            navigator.clipboard.writeText(fen).then(() => alert('FEN 已复制到剪贴板')).catch(() => { prompt('FEN：', fen); });
         }
         catch (e) {
             alert('FEN 导出失败');

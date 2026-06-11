@@ -7,6 +7,9 @@ export class AudioManager {
         if (!this.ctx) {
             this.ctx = new AudioContext();
         }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => { });
+        }
         return this.ctx;
     }
     setEnabled(v) {

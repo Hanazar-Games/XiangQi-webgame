@@ -12,6 +12,7 @@ export class Renderer {
   private showCoords = false;
   private theme: Theme = CLASSIC_THEME;
   private particles = new ParticleSystem();
+  private currentDpr = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -21,13 +22,24 @@ export class Renderer {
 
   private setupHiDPI(): void {
     const dpr = window.devicePixelRatio || 1;
+    this.currentDpr = dpr;
     const cssWidth = 540;
     const cssHeight = 600;
     this.canvas.width = cssWidth * dpr;
     this.canvas.height = cssHeight * dpr;
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
     this.canvas.style.width = cssWidth + 'px';
     this.canvas.style.height = cssHeight + 'px';
+  }
+
+  handleResize(): boolean {
+    const dpr = window.devicePixelRatio || 1;
+    if (dpr !== this.currentDpr) {
+      this.setupHiDPI();
+      return true;
+    }
+    return false;
   }
 
   setFlipped(v: boolean): void {

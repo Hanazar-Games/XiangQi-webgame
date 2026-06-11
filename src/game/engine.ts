@@ -290,6 +290,8 @@ export class Engine {
     // 走法排序
     this.orderMoves(moves, board, depth, side, ttEntry);
 
+    const originalAlpha = alpha;
+    const originalBeta = beta;
     let bestScore = isMaximizing ? -Infinity : Infinity;
     let bestMove: Move | null = null;
     let flag: 'upper' | 'lower' | 'exact' = 'upper';
@@ -328,6 +330,11 @@ export class Engine {
     }
 
     if (!this.stopSearch && bestMove) {
+      if (flag !== 'lower') {
+        if (bestScore <= originalAlpha) flag = 'upper';
+        else if (bestScore >= originalBeta) flag = 'lower';
+        else flag = 'exact';
+      }
       if (this.transpositionTable.size > 500_000) {
         this.transpositionTable.clear();
       }
