@@ -10,6 +10,8 @@ export interface SavedGame {
   date: string;
   moves: string; // 记谱文本
   movesEncoded?: string; // MoveCodec 编码的紧凑字符串（用于复盘重建）
+  initialFen?: string; // 初始局面，旧记录缺省为标准开局
+  initialSide?: string;
   mode: string;
   winner: string | null;
 }
@@ -69,7 +71,14 @@ export class Storage {
     } catch {}
   }
 
-  static addHistory(moves: string, mode: string, winner: string | null, movesEncoded?: string): void {
+  static addHistory(
+    moves: string,
+    mode: string,
+    winner: string | null,
+    movesEncoded?: string,
+    initialFen?: string,
+    initialSide?: string
+  ): void {
     try {
       const history = this.loadHistory();
       const entry: SavedGame = {
@@ -79,6 +88,8 @@ export class Storage {
         winner,
       };
       if (movesEncoded) entry.movesEncoded = movesEncoded;
+      if (initialFen) entry.initialFen = initialFen;
+      if (initialSide) entry.initialSide = initialSide;
       history.unshift(entry);
       if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history));

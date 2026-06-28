@@ -1,9 +1,13 @@
 export class Rules {
+    static isInsideBoard(pos) {
+        return Number.isInteger(pos.x) && Number.isInteger(pos.y) &&
+            pos.x >= 0 && pos.x <= 8 && pos.y >= 0 && pos.y <= 9;
+    }
     static isValidMove(board, from, to) {
+        if (!this.isInsideBoard(from) || !this.isInsideBoard(to))
+            return false;
         const piece = board[from.y][from.x];
         if (!piece)
-            return false;
-        if (to.x < 0 || to.x > 8 || to.y < 0 || to.y > 9)
             return false;
         const target = board[to.y][to.x];
         if (target && target.side === piece.side)
@@ -207,8 +211,12 @@ export class Rules {
     }
     // 模拟移动后是否被将军
     static wouldBeInCheck(board, from, to, side) {
+        if (!this.isInsideBoard(from) || !this.isInsideBoard(to))
+            return true;
         const newBoard = board.map(row => [...row]);
         const piece = newBoard[from.y][from.x];
+        if (!piece)
+            return true;
         newBoard[to.y][to.x] = piece;
         newBoard[from.y][from.x] = null;
         return this.isInCheck(newBoard, side);
@@ -232,10 +240,10 @@ export class Rules {
         return false;
     }
     static isValidMoveWithoutCheck(board, from, to) {
+        if (!this.isInsideBoard(from) || !this.isInsideBoard(to))
+            return false;
         const piece = board[from.y][from.x];
         if (!piece)
-            return false;
-        if (to.x < 0 || to.x > 8 || to.y < 0 || to.y > 9)
             return false;
         const target = board[to.y][to.x];
         if (target && target.side === piece.side)

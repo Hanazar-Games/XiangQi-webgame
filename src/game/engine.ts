@@ -99,8 +99,9 @@ const PSQ: Record<string, number[][]> = {
 function getPieceValue(piece: Piece, pos: Position): number {
   let val = PIECE_VALUES[piece.type];
   const table = PSQ[piece.type];
-  if (table && table[pos.y] && table[pos.y][pos.x] !== undefined) {
-    val += table[pos.y][pos.x];
+  const tableY = piece.side === 'red' ? pos.y : 9 - pos.y;
+  if (table && table[tableY] && table[tableY][pos.x] !== undefined) {
+    val += table[tableY][pos.x];
   }
   if (piece.type === 'pawn') {
     if (piece.side === 'red' && pos.y <= 4) val += 40;
@@ -128,11 +129,11 @@ class KillerTable {
   add(move: Move, depth: number): void {
     if (!this.table[depth]) this.table[depth] = [null, null];
     const [k1, k2] = this.table[depth];
-    if (!k1 || (move.from.x !== k1.from.x || move.from.y !== k1.from.y || move.to.x !== k1.to.x || move.to.y !== k1.to.y)) {
-      this.table[depth] = [move, k1];
-    } else if (!k2 || (move.from.x !== k2.from.x || move.from.y !== k2.from.y || move.to.x !== k2.to.x || move.to.y !== k2.to.y)) {
-      this.table[depth] = [k1, move];
-    }
+    const sameAsK1 = k1 && move.from.x === k1.from.x && move.from.y === k1.from.y && move.to.x === k1.to.x && move.to.y === k1.to.y;
+    const sameAsK2 = k2 && move.from.x === k2.from.x && move.from.y === k2.from.y && move.to.x === k2.to.x && move.to.y === k2.to.y;
+    if (sameAsK1 || sameAsK2) return;
+
+    this.table[depth] = [move, k1];
   }
 }
 
@@ -323,7 +324,7 @@ export class Engine {
         if (score <= alpha) {
           this.killerTable.add(move, depth);
           this.historyTable.add(move, side, depth);
-          flag = 'lower';
+          flag = 'upper';
           break;
         }
       }

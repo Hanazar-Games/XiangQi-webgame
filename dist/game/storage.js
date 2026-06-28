@@ -26,7 +26,7 @@ export class Storage {
         }
         catch { }
     }
-    static addHistory(moves, mode, winner, movesEncoded) {
+    static addHistory(moves, mode, winner, movesEncoded, initialFen, initialSide) {
         try {
             const history = this.loadHistory();
             const entry = {
@@ -37,6 +37,10 @@ export class Storage {
             };
             if (movesEncoded)
                 entry.movesEncoded = movesEncoded;
+            if (initialFen)
+                entry.initialFen = initialFen;
+            if (initialSide)
+                entry.initialSide = initialSide;
             history.unshift(entry);
             if (history.length > MAX_HISTORY)
                 history.length = MAX_HISTORY;

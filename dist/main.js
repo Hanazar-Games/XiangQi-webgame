@@ -46,10 +46,13 @@ class GameApp {
         this.editorBoard = createEmptyBoard();
         this.editorSide = 'red';
         this.editorCanvasParent = null;
+        this.initialSide = 'red';
         this.currentPuzzleIndex = null;
         this.canvas = document.getElementById('board-canvas');
         this.renderer = new Renderer(this.canvas);
         this.board = new Board(() => this.onStateChange());
+        this.initialBoard = this.cloneBoard(this.board.state.board);
+        this.initialSide = this.board.state.currentSide;
         this.screens = {
             menu: document.getElementById('main-menu'),
             game: document.getElementById('game-screen'),
@@ -289,7 +292,8 @@ class GameApp {
             this.isReplaying = true;
             this.board.reset();
             for (const move of moves) {
-                this.board.applyExternalMove(move);
+                if (!this.board.applyExternalMove(move))
+                    break;
                 this.notation.record(move);
             }
             this.isReplaying = false;
@@ -377,6 +381,16 @@ class GameApp {
         Object.values(this.screens).forEach(s => s.classList.remove('active'));
         this.screens[name]?.classList.add('active');
     }
+    cloneBoard(board) {
+        return board.map(row => row.map(piece => piece ? { ...piece } : null));
+    }
+    rememberInitialPosition() {
+        this.initialBoard = this.cloneBoard(this.board.state.board);
+        this.initialSide = this.board.state.currentSide;
+    }
+    resetToInitialPosition() {
+        this.board.loadCustomBoard(this.cloneBoard(this.initialBoard), this.initialSide);
+    }
     backToMenu() {
         this.hideModal();
         this.gameOverShown = false;
@@ -412,6 +426,7 @@ class GameApp {
         Storage.clearResumeState();
         this.showScreen('menu');
         this.loadSettings();
+        this.rememberInitialPosition();
     }
     loadSettings() {
         this.savedSettings = Storage.loadSettings();
@@ -479,13 +494,17 @@ class GameApp {
         this.validMoves = [];
         this.animator.stop();
         if (this.currentPuzzleIndex !== null) {
-            const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+            const puzzle = this.getPuzzlePosition(this.currentPuzzleIndex);
+            if (!puzzle)
+                return;
             this.board.loadCustomBoard(puzzle.board, puzzle.side);
             this.puzzleStartTime = performance.now();
         }
         if (this.mode === 'local-ai') {
             if (this.currentPuzzleIndex !== null) {
-                const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
+                const puzzle = this.getPuzzlePosition(this.currentPuzzleIndex);
+                if (!puzzle)
+                    return;
                 this.ai = new AI(puzzle.side === 'red' ? 'black' : 'red', this.difficulty);
                 this.mySide = puzzle.side;
             }
@@ -495,6 +514,7 @@ class GameApp {
                 this.applyHandicap();
             }
         }
+        this.rememberInitialPosition();
         if (this.mode === 'ai-vs-ai') {
             this.startAiVsAiLoop();
         }
@@ -507,8 +527,8 @@ class GameApp {
         this.updateCaptured();
         this.updateNotation();
         if (this.mode === 'local-ai' && this.currentPuzzleIndex !== null) {
-            const puzzle = ALL_PUZZLES[this.currentPuzzleIndex];
-            if (this.board.state.currentSide !== puzzle.side) {
+            const puzzle = this.getPuzzlePosition(this.currentPuzzleIndex);
+            if (puzzle && this.board.state.currentSide !== puzzle.side) {
                 this.checkAI();
             }
         }
@@ -551,6 +571,25 @@ class GameApp {
         container.innerHTML = html;
         // 事件委托已在构造函数中绑定
     }
+    getPuzzlePosition(index) {
+        if (index >= 1000) {
+            const custom = Storage.loadCustomPuzzles();
+            const p = custom[index - 1000];
+            if (!p)
+                return null;
+            return {
+                board: p.board.map(row => row.map(cell => cell ? { type: cell.type, side: cell.side } : null)),
+                side: p.side,
+            };
+        }
+        const p = ALL_PUZZLES[index];
+        if (!p)
+            return null;
+        return {
+            board: this.cloneBoard(p.board),
+            side: p.side,
+        };
+    }
     applyHandicap() {
         if (this.handicap === 'none')
             return;
@@ -573,34 +612,21 @@ class GameApp {
         this.renderBoard();
     }
     startPuzzle(index) {
-        let board;
-        let side;
-        if (index >= 1000) {
-            const custom = Storage.loadCustomPuzzles();
-            const p = custom[index - 1000];
-            if (!p)
-                return;
-            board = p.board.map(row => row.map(cell => cell ? { type: cell.type, side: cell.side } : null));
-            side = p.side;
-        }
-        else {
-            const p = ALL_PUZZLES[index];
-            if (!p)
-                return;
-            board = p.board.map(row => [...row]);
-            side = p.side;
-        }
+        const puzzle = this.getPuzzlePosition(index);
+        if (!puzzle)
+            return;
         this.mode = 'local-ai';
         this.currentPuzzleIndex = index;
         this.puzzleStartTime = performance.now();
-        this.board.loadCustomBoard(board, side);
+        this.board.loadCustomBoard(puzzle.board, puzzle.side);
+        this.rememberInitialPosition();
         this.notation.clear();
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
-        const aiSide = side === 'red' ? 'black' : 'red';
+        const aiSide = puzzle.side === 'red' ? 'black' : 'red';
         this.ai = new AI(aiSide, this.difficulty);
-        this.mySide = side;
+        this.mySide = puzzle.side;
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
@@ -644,7 +670,10 @@ class GameApp {
             const result = ai.getMove(this.board);
             const move = result.move;
             if (move) {
-                this.board.makeMove(move.from, move.to);
+                if (!this.board.makeMove(move.from, move.to)) {
+                    this.stopAiVsAi();
+                    return;
+                }
                 this.notation.record(move);
                 if (move.captured) {
                     this.renderer.triggerCaptureEffect(move.to, move.piece.side);
@@ -854,7 +883,7 @@ class GameApp {
         this.reviewIndex = null;
         this.notation.clear();
         this.board.loadCustomBoard(this.editorBoard.map(row => [...row]), this.editorSide);
-        this.notation.clear();
+        this.rememberInitialPosition();
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
@@ -912,6 +941,7 @@ class GameApp {
         else {
             this.mySide = null;
         }
+        this.rememberInitialPosition();
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
@@ -995,8 +1025,7 @@ class GameApp {
                     this.showSystemChat('对方发送了格式错误的走子数据');
                     return;
                 }
-                const ok = this.board.applyExternalMove(move);
-                if (!ok) {
+                if (!this.board.applyExternalMove(move)) {
                     console.error('Illegal move rejected:', move);
                     this.showSystemChat('对方发送了非法走子，已拒绝');
                     return;
@@ -1049,6 +1078,14 @@ class GameApp {
         if (typeof to.x !== 'number' || typeof to.y !== 'number')
             return false;
         if (typeof piece.type !== 'string' || typeof piece.side !== 'string')
+            return false;
+        if (!Number.isInteger(from.x) || !Number.isInteger(from.y))
+            return false;
+        if (!Number.isInteger(to.x) || !Number.isInteger(to.y))
+            return false;
+        if (!['king', 'advisor', 'elephant', 'horse', 'rook', 'cannon', 'pawn'].includes(piece.type))
+            return false;
+        if (piece.side !== 'red' && piece.side !== 'black')
             return false;
         if (from.x < 0 || from.x > 8 || from.y < 0 || from.y > 9)
             return false;
@@ -1234,7 +1271,11 @@ class GameApp {
             const result = this.ai.getMove(this.board);
             const aiMove = result.move;
             if (aiMove) {
-                this.board.makeMove(aiMove.from, aiMove.to);
+                if (!this.board.makeMove(aiMove.from, aiMove.to)) {
+                    this.isThinking = false;
+                    this.updateGameInfo();
+                    return;
+                }
                 this.notation.record(aiMove);
                 this.animator.animate(aiMove.piece, aiMove.from, aiMove.to, 180);
                 this.renderBoard();
@@ -1259,7 +1300,8 @@ class GameApp {
                         engine.setTimeLimit(500);
                         const fallback = engine.search(this.board.state.board, 3);
                         if (fallback.move) {
-                            this.board.makeMove(fallback.move.from, fallback.move.to);
+                            if (!this.board.makeMove(fallback.move.from, fallback.move.to))
+                                return;
                             this.notation.record(fallback.move);
                             this.animator.animate(fallback.move.piece, fallback.move.from, fallback.move.to, 180);
                             this.renderBoard();
@@ -1310,13 +1352,14 @@ class GameApp {
             return;
         this.reviewIndex = index;
         this.isReplaying = true;
-        this.board.reset();
+        this.resetToInitialPosition();
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
         for (let i = 0; i <= index; i++) {
             const move = entries[i].move;
-            this.board.applyExternalMove(move);
+            if (!this.board.applyExternalMove(move))
+                break;
         }
         this.isReplaying = false;
         this.renderBoard();
@@ -1331,9 +1374,10 @@ class GameApp {
             return;
         const entries = this.notation.getAll();
         this.isReplaying = true;
-        this.board.reset();
+        this.resetToInitialPosition();
         for (const entry of entries) {
-            this.board.applyExternalMove(entry.move);
+            if (!this.board.applyExternalMove(entry.move))
+                break;
         }
         this.isReplaying = false;
         this.reviewIndex = null;
@@ -1387,11 +1431,25 @@ class GameApp {
         }
         // 重建棋局
         this.isReplaying = true;
-        this.board.reset();
         this.notation.clear();
-        const moves = MoveCodec.decode(entry.movesEncoded, this.board.state.board);
+        if (entry.initialFen) {
+            const side = entry.initialSide === 'black' ? 'b' : 'w';
+            const decoded = FenCodec.decode(`${entry.initialFen} ${side}`);
+            if (decoded) {
+                this.board.loadCustomBoard(decoded.board, decoded.side);
+            }
+            else {
+                this.board.reset();
+            }
+        }
+        else {
+            this.board.reset();
+        }
+        this.rememberInitialPosition();
+        const moves = MoveCodec.decode(entry.movesEncoded, this.cloneBoard(this.initialBoard));
         for (const move of moves) {
-            this.board.applyExternalMove(move);
+            if (!this.board.applyExternalMove(move))
+                break;
             this.notation.record(move);
         }
         this.isReplaying = false;
@@ -1470,7 +1528,7 @@ class GameApp {
                 const fromFile = side === 'red' ? 9 - result.move.from.x : result.move.from.x + 1;
                 const toFile = side === 'red' ? 9 - result.move.to.x : result.move.to.x + 1;
                 const action = result.move.from.x === result.move.to.x
-                    ? (result.move.to.y > result.move.from.y ? '进' : '退')
+                    ? ((side === 'red' ? result.move.to.y < result.move.from.y : result.move.to.y > result.move.from.y) ? '进' : '退')
                     : '平';
                 const targetNum = action === '平' ? toFile : Math.abs((side === 'red' ? 10 - result.move.to.y : result.move.to.y + 1) -
                     (side === 'red' ? 10 - result.move.from.y : result.move.from.y + 1));
@@ -1706,7 +1764,11 @@ class GameApp {
             return;
         }
         const encoded = MoveCodec.encode(this.board.state.moveHistory);
-        const url = `${window.location.origin}${window.location.pathname}#moves=${encoded}`;
+        const params = new URLSearchParams();
+        params.set('fen', FenCodec.encode(this.initialBoard));
+        params.set('side', this.initialSide);
+        params.set('moves', encoded);
+        const url = `${window.location.origin}${window.location.pathname}#${params.toString()}`;
         navigator.clipboard.writeText(url).then(() => {
             alert('分享链接已复制到剪贴板！');
         }).catch(() => {
@@ -1733,6 +1795,7 @@ class GameApp {
             return;
         }
         this.board.loadCustomBoard(result.board, result.side);
+        this.rememberInitialPosition();
         this.notation.clear();
         this.selectedPos = null;
         this.validMoves = [];
@@ -1771,17 +1834,26 @@ class GameApp {
             }
         }
         const hash = window.location.hash;
-        const match = hash.match(/moves=([0-9a-z]+)/);
-        if (match) {
-            const encoded = match[1];
-            const initialBoard = this.board.state.board.map(row => [...row]);
+        const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+        const encoded = hashParams.get('moves') ?? hash.match(/moves=([0-9a-z]+)/)?.[1];
+        if (encoded) {
+            const initialFen = hashParams.get('fen');
+            const initialSide = hashParams.get('side') === 'black' ? 'black' : 'red';
+            const decodedInitial = initialFen ? FenCodec.decode(`${initialFen} ${initialSide === 'black' ? 'b' : 'w'}`) : null;
+            const initialBoard = decodedInitial ? decodedInitial.board : this.cloneBoard(this.board.state.board);
             const moves = MoveCodec.decode(encoded, initialBoard);
             if (moves.length > 0) {
                 setTimeout(() => {
                     this.startGame('local-pvp');
+                    if (decodedInitial) {
+                        this.board.loadCustomBoard(decodedInitial.board, decodedInitial.side);
+                        this.rememberInitialPosition();
+                        this.notation.clear();
+                    }
                     this.isReplaying = true;
                     for (const move of moves) {
-                        this.board.applyExternalMove(move);
+                        if (!this.board.applyExternalMove(move))
+                            break;
                         this.notation.record(move);
                     }
                     this.isReplaying = false;
@@ -1877,9 +1949,10 @@ class GameApp {
         const mode = this.mode || 'local-pvp';
         const winner = this.board.state.winner;
         const movesEncoded = MoveCodec.encode(this.board.state.moveHistory);
-        Storage.addHistory(moves, mode, winner, movesEncoded);
+        const initialFen = FenCodec.encode(this.initialBoard);
+        Storage.addHistory(moves, mode, winner, movesEncoded, initialFen, this.initialSide);
         // 保存残局成绩
-        if (this.currentPuzzleIndex !== null && winner === this.mySide) {
+        if (this.currentPuzzleIndex !== null && this.currentPuzzleIndex < 1000 && winner === this.mySide) {
             const steps = this.board.state.moveHistory.length;
             const timeMs = Math.floor(performance.now() - this.puzzleStartTime);
             Storage.savePuzzleRecord(this.currentPuzzleIndex, steps, timeMs);

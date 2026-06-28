@@ -40,7 +40,8 @@ export class Notation {
         const toRank = piece.side === 'red' ? 10 - to.y : to.y + 1;
         let action;
         if (from.x === to.x) {
-            action = to.y > from.y ? '进' : '退';
+            const forward = piece.side === 'red' ? to.y < from.y : to.y > from.y;
+            action = forward ? '进' : '退';
         }
         else {
             action = '平';

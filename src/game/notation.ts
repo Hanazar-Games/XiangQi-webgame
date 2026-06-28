@@ -53,7 +53,8 @@ export class Notation {
 
     let action: string;
     if (from.x === to.x) {
-      action = to.y > from.y ? '进' : '退';
+      const forward = piece.side === 'red' ? to.y < from.y : to.y > from.y;
+      action = forward ? '进' : '退';
     } else {
       action = '平';
     }

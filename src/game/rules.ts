@@ -1,15 +1,20 @@
 import { Piece, Position, Side, Move } from './types.js';
 
 export class Rules {
+  private static isInsideBoard(pos: Position): boolean {
+    return Number.isInteger(pos.x) && Number.isInteger(pos.y) &&
+      pos.x >= 0 && pos.x <= 8 && pos.y >= 0 && pos.y <= 9;
+  }
+
   static isValidMove(
     board: (Piece | null)[][],
     from: Position,
     to: Position
   ): boolean {
+    if (!this.isInsideBoard(from) || !this.isInsideBoard(to)) return false;
+
     const piece = board[from.y][from.x];
     if (!piece) return false;
-
-    if (to.x < 0 || to.x > 8 || to.y < 0 || to.y > 9) return false;
 
     const target = board[to.y][to.x];
     if (target && target.side === piece.side) return false;
@@ -250,8 +255,12 @@ export class Rules {
     to: Position,
     side: Side
   ): boolean {
+    if (!this.isInsideBoard(from) || !this.isInsideBoard(to)) return true;
+
     const newBoard = board.map(row => [...row]);
     const piece = newBoard[from.y][from.x];
+    if (!piece) return true;
+
     newBoard[to.y][to.x] = piece;
     newBoard[from.y][from.x] = null;
     return this.isInCheck(newBoard, side);
@@ -283,10 +292,10 @@ export class Rules {
     from: Position,
     to: Position
   ): boolean {
+    if (!this.isInsideBoard(from) || !this.isInsideBoard(to)) return false;
+
     const piece = board[from.y][from.x];
     if (!piece) return false;
-
-    if (to.x < 0 || to.x > 8 || to.y < 0 || to.y > 9) return false;
 
     const target = board[to.y][to.x];
     if (target && target.side === piece.side) return false;

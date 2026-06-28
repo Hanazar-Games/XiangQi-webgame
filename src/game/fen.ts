@@ -60,6 +60,8 @@ export class FenCodec {
           const mapped = FEN_MAP[char];
           if (mapped) {
             row.push({ type: mapped[0], side: mapped[1] });
+          } else {
+            return null;
           }
         }
       }

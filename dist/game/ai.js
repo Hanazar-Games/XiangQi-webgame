@@ -20,13 +20,14 @@ export class AI {
         const moves = this.getAllLegalMoves(board);
         if (moves.length === 0)
             return { move: null, info: null };
-        // 计算黑方已走步数
-        const blackMoveCount = board.state.moveHistory.filter(m => m.piece.side === 'black').length;
-        // 开局阶段使用开局库
-        if (blackMoveCount < 3) {
-            const openingMove = this.openingBook.getMove(board.state.board, blackMoveCount);
-            if (openingMove)
-                return { move: openingMove, info: null };
+        if (this.side === 'black') {
+            const blackMoveCount = board.state.moveHistory.filter(m => m.piece.side === 'black').length;
+            // 开局库只包含黑方应法，红方AI直接进入搜索。
+            if (blackMoveCount < 3) {
+                const openingMove = this.openingBook.getMove(board.state.board, blackMoveCount);
+                if (openingMove)
+                    return { move: openingMove, info: null };
+            }
         }
         // 使用搜索引擎
         const result = this.engine.search(board.state.board, 5);

@@ -4,6 +4,10 @@ export class Board {
         this.onStateChange = onStateChange;
         this.state = this.createInitialState();
     }
+    isInsideBoard(pos) {
+        return Number.isInteger(pos.x) && Number.isInteger(pos.y) &&
+            pos.x >= 0 && pos.x <= 8 && pos.y >= 0 && pos.y <= 9;
+    }
     createInitialState() {
         const board = Array(10)
             .fill(null)
@@ -157,8 +161,21 @@ export class Board {
     }
     // 设置外部状态（用于联机接收对方移动）
     applyExternalMove(move) {
+        if (this.state.gameOver)
+            return false;
+        if (!this.isInsideBoard(move.from) || !this.isInsideBoard(move.to))
+            return false;
         const piece = this.state.board[move.from.y][move.from.x];
         if (!piece || piece.side !== this.state.currentSide)
+            return false;
+        if (piece.type !== move.piece.type || piece.side !== move.piece.side)
+            return false;
+        const target = this.state.board[move.to.y][move.to.x] ?? undefined;
+        if (target?.type !== move.captured?.type || target?.side !== move.captured?.side)
+            return false;
+        if (!Rules.isValidMove(this.state.board, move.from, move.to))
+            return false;
+        if (Rules.wouldBeInCheck(this.state.board, move.from, move.to, piece.side))
             return false;
         this.state.board[move.to.y][move.to.x] = piece;
         this.state.board[move.from.y][move.from.x] = null;
