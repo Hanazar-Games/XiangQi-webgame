@@ -490,6 +490,7 @@ body {
 
   .header-actions {
     gap: 4px;
+    flex-wrap: wrap;
   }
 
   .btn-small {
@@ -509,6 +510,11 @@ body {
 
   .puzzle-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .difficulty-bar,
+  .theme-bar {
+    flex-wrap: wrap;
   }
 }
 
@@ -1262,4 +1268,47 @@ body {
 .history-actions .btn-small {
   font-size: 0.75rem;
   padding: 4px 10px;
+}
+
+/* 版本公告 */
+.announcement-panel {
+  max-width: 680px;
+}
+
+.announcement-current,
+.announcement-item {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-top: 12px;
+}
+
+.announcement-current h3,
+.announcement-history h3 {
+  color: #d4a574;
+  margin: 8px 0;
+}
+
+.announcement-version {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(212, 165, 116, 0.18);
+  border: 1px solid rgba(212, 165, 116, 0.35);
+  color: #f0d0a6;
+  font-size: 0.82rem;
+  font-weight: bold;
+}
+
+.announcement-current ul {
+  margin: 8px 0 0 18px;
+  line-height: 1.7;
+  color: #ddd;
+}
+
+.announcement-item p {
+  margin-top: 8px;
+  line-height: 1.6;
+  color: #bbb;
 }

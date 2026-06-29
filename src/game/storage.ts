@@ -1,7 +1,9 @@
 export interface GameSettings {
   sound: boolean;
+  bgm: boolean;
   flipped: boolean;
   coords: boolean;
+  evaluation: boolean;
   difficulty: 'easy' | 'normal' | 'hard';
   theme: number;
 }
@@ -52,17 +54,20 @@ export interface CustomPuzzle {
 
 export class Storage {
   static loadSettings(): GameSettings {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return {
+    const defaults: GameSettings = {
       sound: true,
+      bgm: false,
       flipped: false,
       coords: false,
+      evaluation: false,
       difficulty: 'normal',
       theme: 0,
     };
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) return { ...defaults, ...JSON.parse(raw) };
+    } catch {}
+    return defaults;
   }
 
   static saveSettings(settings: GameSettings): void {

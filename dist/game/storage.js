@@ -6,19 +6,22 @@ const CUSTOM_PUZZLES_KEY = 'xiangqi_custom_puzzles';
 const MAX_HISTORY = 20;
 export class Storage {
     static loadSettings() {
-        try {
-            const raw = localStorage.getItem(SETTINGS_KEY);
-            if (raw)
-                return JSON.parse(raw);
-        }
-        catch { }
-        return {
+        const defaults = {
             sound: true,
+            bgm: false,
             flipped: false,
             coords: false,
+            evaluation: false,
             difficulty: 'normal',
             theme: 0,
         };
+        try {
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (raw)
+                return { ...defaults, ...JSON.parse(raw) };
+        }
+        catch { }
+        return defaults;
     }
     static saveSettings(settings) {
         try {

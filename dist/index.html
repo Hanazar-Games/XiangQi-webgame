@@ -45,6 +45,7 @@
         <button id="btn-lan-host" class="btn-primary">局域网联机 - 创建房间</button>
         <button id="btn-lan-join" class="btn-primary">局域网联机 - 加入房间</button>
         <button id="btn-history" class="btn-secondary">历史对局</button>
+        <button id="btn-announcements" class="btn-secondary">版本公告</button>
         <button id="btn-rules" class="btn-secondary">规则说明</button>
       </div>
     </div>
@@ -138,6 +139,10 @@
             <label class="toggle-label">
               <input type="checkbox" id="sound-toggle" checked>
               <span>音效</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="bgm-toggle">
+              <span>背景乐</span>
             </label>
             <label class="toggle-label">
               <input type="checkbox" id="flip-toggle">
@@ -250,6 +255,31 @@
           <button id="btn-clear-history" class="btn-small">清空</button>
         </div>
         <div id="history-list" class="history-list"></div>
+      </div>
+    </div>
+
+    <!-- 版本公告 -->
+    <div id="announcements-screen" class="screen">
+      <div class="rules-panel announcement-panel">
+        <button id="btn-announcements-back" class="btn-small">返回</button>
+        <h2>版本公告</h2>
+        <section class="announcement-current">
+          <div class="announcement-version">v1.1.0</div>
+          <h3>稳定性与复盘修复</h3>
+          <ul>
+            <li>修复摆盘模式无法选择棋子的交互问题。</li>
+            <li>修复非标准局面分享、历史复盘和回放可能丢失初始棋盘的问题。</li>
+            <li>加强联机走子、FEN、历史记录和自定义残局的校验与显示安全。</li>
+            <li>新增可选背景乐开关，音效、背景乐和局面评估设置可独立记忆。</li>
+          </ul>
+        </section>
+        <section class="announcement-history">
+          <h3>历史公告</h3>
+          <div class="announcement-item">
+            <div class="announcement-version">v1.0.0</div>
+            <p>首个公开版本：支持本地双人、人机对战、局域网联机、残局挑战、摆盘、棋谱、截图、FEN 和基础音效。</p>
+          </div>
+        </section>
       </div>
     </div>
 

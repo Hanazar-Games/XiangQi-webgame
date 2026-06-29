@@ -1,6 +1,9 @@
 export class AudioManager {
   private ctx: AudioContext | null = null;
   private enabled = true;
+  private bgmEnabled = false;
+  private bgmGain: GainNode | null = null;
+  private bgmOscillators: OscillatorNode[] = [];
 
   private getContext(): AudioContext {
     if (!this.ctx) {
@@ -14,6 +17,56 @@ export class AudioManager {
 
   setEnabled(v: boolean): void {
     this.enabled = v;
+  }
+
+  setBgmEnabled(v: boolean): void {
+    this.bgmEnabled = v;
+    if (v) {
+      this.startBgm();
+    } else {
+      this.stopBgm();
+    }
+  }
+
+  private startBgm(): void {
+    if (this.bgmOscillators.length > 0) return;
+
+    const ctx = this.getContext();
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, ctx.currentTime + 1.2);
+    gain.connect(ctx.destination);
+
+    const notes = [130.81, 196.00, 261.63];
+    this.bgmOscillators = notes.map((freq, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = i === 1 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.connect(gain);
+      osc.start();
+      return osc;
+    });
+    this.bgmGain = gain;
+  }
+
+  stopBgm(): void {
+    if (this.bgmOscillators.length === 0) return;
+
+    const ctx = this.getContext();
+    const gain = this.bgmGain;
+    if (gain) {
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+    }
+
+    for (const osc of this.bgmOscillators) {
+      try {
+        osc.stop(ctx.currentTime + 0.45);
+      } catch {}
+    }
+    this.bgmOscillators = [];
+    this.bgmGain = null;
   }
 
   // 落子音：短促的木鱼/敲击声

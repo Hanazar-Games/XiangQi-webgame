@@ -61,9 +61,11 @@ class GameApp {
             puzzle: document.getElementById('puzzle-screen'),
             history: document.getElementById('history-screen'),
             editor: document.getElementById('editor-screen'),
+            announcements: document.getElementById('announcements-screen'),
         };
         this.notationEl = document.getElementById('notation-list');
         this.soundToggle = document.getElementById('sound-toggle');
+        this.bgmToggle = document.getElementById('bgm-toggle');
         this.setupEventListeners();
         this.loadSettings();
         this.parseUrlParams();
@@ -86,6 +88,8 @@ class GameApp {
         document.getElementById('btn-lan-join').addEventListener('click', () => this.showLanJoin());
         document.getElementById('btn-rules').addEventListener('click', () => this.showScreen('rules'));
         document.getElementById('btn-history').addEventListener('click', () => this.showHistory());
+        document.getElementById('btn-announcements').addEventListener('click', () => this.showScreen('announcements'));
+        document.getElementById('btn-announcements-back').addEventListener('click', () => this.showScreen('menu'));
         document.getElementById('btn-history-back').addEventListener('click', () => this.showScreen('menu'));
         document.getElementById('btn-clear-history').addEventListener('click', () => {
             if (confirm('确定要清空所有历史对局吗？')) {
@@ -168,6 +172,11 @@ class GameApp {
         // 音效开关
         this.soundToggle.addEventListener('change', () => {
             this.audio.setEnabled(this.soundToggle.checked);
+            this.saveSettings();
+        });
+        this.bgmToggle.addEventListener('change', () => {
+            this.audio.setBgmEnabled(this.bgmToggle.checked);
+            this.saveSettings();
         });
         // 翻转棋盘
         const flipToggle = document.getElementById('flip-toggle');
@@ -264,7 +273,7 @@ class GameApp {
             this.updateEditorSideUI();
         });
         document.getElementById('editor-palette').addEventListener('click', (e) => {
-            const target = e.target.closest('.palette-piece');
+            const target = e.target.closest('.piece-brush');
             if (!target)
                 return;
             const type = target.dataset.type;
@@ -431,13 +440,17 @@ class GameApp {
     loadSettings() {
         this.savedSettings = Storage.loadSettings();
         this.audio.setEnabled(this.savedSettings.sound);
+        this.audio.setBgmEnabled(this.savedSettings.bgm);
         this.renderer.setFlipped(this.savedSettings.flipped);
         this.renderer.setShowCoords(this.savedSettings.coords);
         this.renderer.setTheme(ALL_THEMES[this.savedSettings.theme ?? 0]);
         this.difficulty = this.savedSettings.difficulty;
+        this.showEvaluation = this.savedSettings.evaluation;
         document.getElementById('sound-toggle').checked = this.savedSettings.sound;
+        document.getElementById('bgm-toggle').checked = this.savedSettings.bgm;
         document.getElementById('flip-toggle').checked = this.savedSettings.flipped;
         document.getElementById('coords-toggle').checked = this.savedSettings.coords;
+        document.getElementById('eval-toggle').checked = this.savedSettings.evaluation;
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.theme, 10) === (this.savedSettings.theme ?? 0));
         });
@@ -448,8 +461,10 @@ class GameApp {
     saveSettings() {
         Storage.saveSettings({
             sound: document.getElementById('sound-toggle').checked,
+            bgm: document.getElementById('bgm-toggle').checked,
             flipped: document.getElementById('flip-toggle').checked,
             coords: document.getElementById('coords-toggle').checked,
+            evaluation: document.getElementById('eval-toggle').checked,
             difficulty: this.difficulty,
             theme: parseInt(document.querySelector('.theme-btn.active')?.getAttribute('data-theme') || '0', 10),
         });
@@ -468,8 +483,8 @@ class GameApp {
             const winnerText = h.winner === 'red' ? '红方胜' : h.winner === 'black' ? '黑方胜' : '和棋';
             const canAnalyze = !!h.movesEncoded;
             return `<div class="history-item" data-index="${i}">
-        <div class="history-meta">${date} · ${modeText} · ${winnerText}</div>
-        <div class="history-moves">${h.moves.slice(0, 80)}${h.moves.length > 80 ? '...' : ''}</div>
+        <div class="history-meta">${this.escapeHtml(date)} · ${modeText} · ${winnerText}</div>
+        <div class="history-moves">${this.escapeHtml(h.moves.slice(0, 80))}${h.moves.length > 80 ? '...' : ''}</div>
         <div class="history-actions">
           <button class="btn-small btn-analysis" data-index="${i}" ${!canAnalyze ? 'disabled title="旧格式记录不支持分析"' : ''}>复盘分析</button>
         </div>
@@ -555,15 +570,15 @@ class GameApp {
                     ? `<span class="puzzle-best">最佳: ${best.steps}步 / ${(best.timeMs / 1000).toFixed(1)}秒</span>`
                     : '';
                 const deleteBtn = cat === '自定义'
-                    ? `<button class="puzzle-delete-btn" data-delete-id="${p.id}" title="删除">✕</button>`
+                    ? `<button class="puzzle-delete-btn" data-delete-id="${this.escapeAttr(String(p.id ?? ''))}" title="删除">✕</button>`
                     : '';
                 html += `<div class="puzzle-card" data-index="${idx}">
           <div class="puzzle-card-header">
-            <div class="puzzle-name">${p.name}</div>
+            <div class="puzzle-name">${this.escapeHtml(String(p.name ?? '未命名残局'))}</div>
             ${deleteBtn}
           </div>
           <div class="puzzle-stars">${stars} ${recordHtml}</div>
-          <div class="puzzle-desc">${p.description}</div>
+          <div class="puzzle-desc">${this.escapeHtml(String(p.description ?? ''))}</div>
         </div>`;
             }
             html += `</div>`;
@@ -577,9 +592,24 @@ class GameApp {
             const p = custom[index - 1000];
             if (!p)
                 return null;
+            if (!Array.isArray(p.board) || p.board.length !== 10 || p.board.some(row => !Array.isArray(row) || row.length !== 9)) {
+                return null;
+            }
+            const side = p.side === 'black' ? 'black' : 'red';
+            const board = p.board.map(row => row.map(cell => {
+                if (!cell)
+                    return null;
+                if (!['king', 'advisor', 'elephant', 'horse', 'rook', 'cannon', 'pawn'].includes(cell.type))
+                    return null;
+                if (cell.side !== 'red' && cell.side !== 'black')
+                    return null;
+                return { type: cell.type, side: cell.side };
+            }));
+            if (!validateBoard(board).valid)
+                return null;
             return {
-                board: p.board.map(row => row.map(cell => cell ? { type: cell.type, side: cell.side } : null)),
-                side: p.side,
+                board,
+                side,
             };
         }
         const p = ALL_PUZZLES[index];
@@ -647,6 +677,7 @@ class GameApp {
         this.mySide = null;
         this.aiRed = new AI('red', this.difficulty);
         this.aiBlack = new AI('black', this.difficulty);
+        this.rememberInitialPosition();
         this.showScreen('game');
         this.updateGameInfo();
         this.renderBoard();
@@ -805,7 +836,7 @@ class GameApp {
             alert('局面不合法，无法保存：\n' + result.errors.join('\n'));
             return;
         }
-        const name = prompt('请输入残局名称：', '自定义残局');
+        const name = prompt('请输入残局名称：', '自定义残局')?.trim();
         if (!name)
             return;
         const boardForStorage = this.editorBoard.map(row => row.map(p => p ? { type: p.type, side: p.side } : null));
@@ -1152,6 +1183,9 @@ class GameApp {
         div.textContent = text;
         return div.innerHTML;
     }
+    escapeAttr(text) {
+        return this.escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
     // ========== 游戏交互 ==========
     onPointerDown(e) {
         // 使用 offsetX/offsetY（CSS像素，与canvas逻辑坐标一致）
@@ -1447,10 +1481,12 @@ class GameApp {
         }
         this.rememberInitialPosition();
         const moves = MoveCodec.decode(entry.movesEncoded, this.cloneBoard(this.initialBoard));
+        let appliedMoves = 0;
         for (const move of moves) {
             if (!this.board.applyExternalMove(move))
                 break;
             this.notation.record(move);
+            appliedMoves++;
         }
         this.isReplaying = false;
         this.mode = null;
@@ -1458,7 +1494,7 @@ class GameApp {
         this.currentPuzzleIndex = null;
         this.gameOverShown = false;
         this.isThinking = false;
-        this.reviewIndex = moves.length - 1;
+        this.reviewIndex = appliedMoves > 0 ? appliedMoves - 1 : null;
         this.selectedPos = null;
         this.validMoves = [];
         this.animator.stop();
@@ -1467,7 +1503,7 @@ class GameApp {
         this.renderBoard();
         this.updateCaptured();
         this.updateNotation();
-        document.getElementById('review-overlay').classList.remove('hidden');
+        document.getElementById('review-overlay').classList.toggle('hidden', this.reviewIndex === null);
         this.resetAnalysisPanel();
     }
     async analyzeCurrentPosition() {
@@ -1886,7 +1922,6 @@ class GameApp {
             return;
         this.board.state.gameOver = true;
         this.board.state.winner = this.mySide || null;
-        this.gameOverShown = true;
         this.stopTimer();
         this.updateGameInfo();
         this.renderBoard();

@@ -1,6 +1,6 @@
 {
   "name": "xiangqi-webgame",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "中国象棋 WebGame - 支持单机和局域网联机",
   "scripts": {
     "build": "tsc && node scripts/build.js",
