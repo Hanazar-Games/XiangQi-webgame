@@ -14,6 +14,9 @@ import { FenCodec } from './game/fen.js';
 import { PIECE_NAMES } from './game/types.js';
 import { Rules } from './game/rules.js';
 import { createEmptyBoard, createStandardBoard, BRUSH_PIECES, validateBoard } from './game/editor.js';
+const DEFAULT_TIME_LIMIT_SECONDS = 30 * 60;
+const MIN_TIME_LIMIT_MINUTES = 1;
+const MAX_TIME_LIMIT_MINUTES = 180;
 class GameApp {
     constructor() {
         this.mode = null;
@@ -35,8 +38,8 @@ class GameApp {
         this.reviewIndex = null;
         this.isReplaying = false;
         this.savedSettings = Storage.loadSettings();
-        this.timeRed = 600;
-        this.timeBlack = 600;
+        this.timeRed = DEFAULT_TIME_LIMIT_SECONDS;
+        this.timeBlack = DEFAULT_TIME_LIMIT_SECONDS;
         this.timerInterval = null;
         this.aiVsAiInterval = null;
         this.aiRed = null;
@@ -200,6 +203,14 @@ class GameApp {
                 this.saveSettings();
             });
         }
+        const timeLimitInput = document.getElementById('time-limit-minutes');
+        timeLimitInput.addEventListener('change', () => {
+            timeLimitInput.value = String(this.getTimeLimitMinutesFromInput());
+            this.saveSettings();
+            this.savedSettings = Storage.loadSettings();
+            this.resetTimers();
+            this.updateGameInfo();
+        });
         // 联机
         document.getElementById('btn-lan-back').addEventListener('click', () => this.backToMenu());
         document.getElementById('btn-copy-offer').addEventListener('click', () => this.copyText('host-offer'));
@@ -451,6 +462,7 @@ class GameApp {
         document.getElementById('flip-toggle').checked = this.savedSettings.flipped;
         document.getElementById('coords-toggle').checked = this.savedSettings.coords;
         document.getElementById('eval-toggle').checked = this.savedSettings.evaluation;
+        document.getElementById('time-limit-minutes').value = String(this.savedSettings.timeLimitMinutes);
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.classList.toggle('active', parseInt(btn.dataset.theme, 10) === (this.savedSettings.theme ?? 0));
         });
@@ -467,7 +479,26 @@ class GameApp {
             evaluation: document.getElementById('eval-toggle').checked,
             difficulty: this.difficulty,
             theme: parseInt(document.querySelector('.theme-btn.active')?.getAttribute('data-theme') || '0', 10),
+            timeLimitMinutes: this.getTimeLimitMinutesFromInput(),
         });
+    }
+    getTimeLimitMinutesFromInput() {
+        const input = document.getElementById('time-limit-minutes');
+        const minutes = parseInt(input.value, 10);
+        if (!Number.isFinite(minutes))
+            return this.savedSettings.timeLimitMinutes;
+        return Math.min(MAX_TIME_LIMIT_MINUTES, Math.max(MIN_TIME_LIMIT_MINUTES, minutes));
+    }
+    getTimeLimitSeconds() {
+        const minutes = this.savedSettings.timeLimitMinutes;
+        if (!Number.isFinite(minutes))
+            return DEFAULT_TIME_LIMIT_SECONDS;
+        return Math.min(MAX_TIME_LIMIT_MINUTES, Math.max(MIN_TIME_LIMIT_MINUTES, minutes)) * 60;
+    }
+    resetTimers() {
+        const seconds = this.getTimeLimitSeconds();
+        this.timeRed = seconds;
+        this.timeBlack = seconds;
     }
     showHistory() {
         this.showScreen('history');
@@ -499,8 +530,7 @@ class GameApp {
         this.gameOverShown = false;
         this.reviewIndex = null;
         this.isThinking = false;
-        this.timeRed = 600;
-        this.timeBlack = 600;
+        this.resetTimers();
         this.stopTimer();
         this.stopAiVsAi();
         this.board.reset();
@@ -648,6 +678,10 @@ class GameApp {
         this.mode = 'local-ai';
         this.currentPuzzleIndex = index;
         this.puzzleStartTime = performance.now();
+        this.gameOverShown = false;
+        this.reviewIndex = null;
+        this.resetTimers();
+        this.stopTimer();
         this.board.loadCustomBoard(puzzle.board, puzzle.side);
         this.rememberInitialPosition();
         this.notation.clear();
@@ -669,6 +703,10 @@ class GameApp {
     startAiVsAi() {
         this.stopAiVsAi();
         this.mode = 'ai-vs-ai';
+        this.gameOverShown = false;
+        this.reviewIndex = null;
+        this.resetTimers();
+        this.stopTimer();
         this.board.reset();
         this.notation.clear();
         this.selectedPos = null;
@@ -912,6 +950,8 @@ class GameApp {
         this.hintMove = null;
         this.gameOverShown = false;
         this.reviewIndex = null;
+        this.resetTimers();
+        this.stopTimer();
         this.notation.clear();
         this.board.loadCustomBoard(this.editorBoard.map(row => [...row]), this.editorSide);
         this.rememberInitialPosition();
@@ -944,8 +984,7 @@ class GameApp {
         this.hintMove = null;
         this.gameOverShown = false;
         this.reviewIndex = null;
-        this.timeRed = 600;
-        this.timeBlack = 600;
+        this.resetTimers();
         this.stopTimer();
         this.board.reset();
         this.notation.clear();

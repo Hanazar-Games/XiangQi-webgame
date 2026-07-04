@@ -6,6 +6,7 @@ export interface GameSettings {
   evaluation: boolean;
   difficulty: 'easy' | 'normal' | 'hard';
   theme: number;
+  timeLimitMinutes: number;
 }
 
 export interface SavedGame {
@@ -62,10 +63,17 @@ export class Storage {
       evaluation: false,
       difficulty: 'normal',
       theme: 0,
+      timeLimitMinutes: 30,
     };
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) return { ...defaults, ...JSON.parse(raw) };
+      if (raw) {
+        const settings = { ...defaults, ...JSON.parse(raw) };
+        settings.timeLimitMinutes = Number.isFinite(settings.timeLimitMinutes)
+          ? Math.min(180, Math.max(1, Math.round(settings.timeLimitMinutes)))
+          : defaults.timeLimitMinutes;
+        return settings;
+      }
     } catch {}
     return defaults;
   }

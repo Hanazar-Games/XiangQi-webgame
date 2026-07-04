@@ -64,8 +64,8 @@
           <span id="eval-text" class="eval-text">0</span>
         </div>
         <div class="timers">
-          <div id="timer-red" class="timer">10:00</div>
-          <div id="timer-black" class="timer">10:00</div>
+          <div id="timer-red" class="timer">30:00</div>
+          <div id="timer-black" class="timer">30:00</div>
         </div>
         <div id="ai-control" class="ai-control hidden">
           <button id="btn-ai-pause" class="btn-small">暂停</button>
@@ -155,6 +155,11 @@
             <label class="toggle-label">
               <input type="checkbox" id="eval-toggle">
               <span>局面评估</span>
+            </label>
+            <label class="setting-number-label">
+              <span>每方时间</span>
+              <input type="number" id="time-limit-minutes" min="1" max="180" step="1" value="30">
+              <span>分钟</span>
             </label>
             <div class="theme-bar">
               <span>主题：</span>

@@ -16,6 +16,9 @@ import { Rules } from './game/rules.js';
 import { Brush, createEmptyBoard, createStandardBoard, BRUSH_PIECES, validateBoard } from './game/editor.js';
 
 type GameMode = 'local-pvp' | 'local-ai' | 'lan-host' | 'lan-join' | 'ai-vs-ai' | 'editor';
+const DEFAULT_TIME_LIMIT_SECONDS = 30 * 60;
+const MIN_TIME_LIMIT_MINUTES = 1;
+const MAX_TIME_LIMIT_MINUTES = 180;
 
 class GameApp {
   private board: Board;
@@ -40,8 +43,8 @@ class GameApp {
   private reviewIndex: number | null = null;
   private isReplaying = false;
   private savedSettings = Storage.loadSettings();
-  private timeRed = 600;
-  private timeBlack = 600;
+  private timeRed = DEFAULT_TIME_LIMIT_SECONDS;
+  private timeBlack = DEFAULT_TIME_LIMIT_SECONDS;
   private timerInterval: ReturnType<typeof setInterval> | null = null;
   private aiVsAiInterval: ReturnType<typeof setInterval> | null = null;
   private aiRed: AI | null = null;
@@ -227,6 +230,15 @@ class GameApp {
         this.saveSettings();
       });
     }
+
+    const timeLimitInput = document.getElementById('time-limit-minutes') as HTMLInputElement;
+    timeLimitInput.addEventListener('change', () => {
+      timeLimitInput.value = String(this.getTimeLimitMinutesFromInput());
+      this.saveSettings();
+      this.savedSettings = Storage.loadSettings();
+      this.resetTimers();
+      this.updateGameInfo();
+    });
 
     // 联机
     document.getElementById('btn-lan-back')!.addEventListener('click', () => this.backToMenu());
@@ -487,6 +499,7 @@ class GameApp {
     (document.getElementById('flip-toggle') as HTMLInputElement).checked = this.savedSettings.flipped;
     (document.getElementById('coords-toggle') as HTMLInputElement).checked = this.savedSettings.coords;
     (document.getElementById('eval-toggle') as HTMLInputElement).checked = this.savedSettings.evaluation;
+    (document.getElementById('time-limit-minutes') as HTMLInputElement).value = String(this.savedSettings.timeLimitMinutes);
 
     document.querySelectorAll('.theme-btn').forEach(btn => {
       btn.classList.toggle('active', parseInt((btn as HTMLElement).dataset.theme!, 10) === (this.savedSettings.theme ?? 0));
@@ -506,7 +519,27 @@ class GameApp {
       evaluation: (document.getElementById('eval-toggle') as HTMLInputElement).checked,
       difficulty: this.difficulty,
       theme: parseInt(document.querySelector('.theme-btn.active')?.getAttribute('data-theme') || '0', 10),
+      timeLimitMinutes: this.getTimeLimitMinutesFromInput(),
     });
+  }
+
+  private getTimeLimitMinutesFromInput(): number {
+    const input = document.getElementById('time-limit-minutes') as HTMLInputElement;
+    const minutes = parseInt(input.value, 10);
+    if (!Number.isFinite(minutes)) return this.savedSettings.timeLimitMinutes;
+    return Math.min(MAX_TIME_LIMIT_MINUTES, Math.max(MIN_TIME_LIMIT_MINUTES, minutes));
+  }
+
+  private getTimeLimitSeconds(): number {
+    const minutes = this.savedSettings.timeLimitMinutes;
+    if (!Number.isFinite(minutes)) return DEFAULT_TIME_LIMIT_SECONDS;
+    return Math.min(MAX_TIME_LIMIT_MINUTES, Math.max(MIN_TIME_LIMIT_MINUTES, minutes)) * 60;
+  }
+
+  private resetTimers(): void {
+    const seconds = this.getTimeLimitSeconds();
+    this.timeRed = seconds;
+    this.timeBlack = seconds;
   }
 
   private showHistory(): void {
@@ -539,8 +572,7 @@ class GameApp {
     this.gameOverShown = false;
     this.reviewIndex = null;
     this.isThinking = false;
-    this.timeRed = 600;
-    this.timeBlack = 600;
+    this.resetTimers();
     this.stopTimer();
     this.stopAiVsAi();
     this.board.reset();
@@ -682,6 +714,10 @@ class GameApp {
     this.mode = 'local-ai';
     this.currentPuzzleIndex = index;
     this.puzzleStartTime = performance.now();
+    this.gameOverShown = false;
+    this.reviewIndex = null;
+    this.resetTimers();
+    this.stopTimer();
     this.board.loadCustomBoard(puzzle.board, puzzle.side);
     this.rememberInitialPosition();
     this.notation.clear();
@@ -706,6 +742,10 @@ class GameApp {
   private startAiVsAi(): void {
     this.stopAiVsAi();
     this.mode = 'ai-vs-ai' as GameMode;
+    this.gameOverShown = false;
+    this.reviewIndex = null;
+    this.resetTimers();
+    this.stopTimer();
     this.board.reset();
     this.notation.clear();
     this.selectedPos = null;
@@ -967,6 +1007,8 @@ class GameApp {
     this.hintMove = null;
     this.gameOverShown = false;
     this.reviewIndex = null;
+    this.resetTimers();
+    this.stopTimer();
     this.notation.clear();
     this.board.loadCustomBoard(this.editorBoard.map(row => [...row]), this.editorSide);
     this.rememberInitialPosition();
@@ -1004,8 +1046,7 @@ class GameApp {
     this.hintMove = null;
     this.gameOverShown = false;
     this.reviewIndex = null;
-    this.timeRed = 600;
-    this.timeBlack = 600;
+    this.resetTimers();
     this.stopTimer();
     this.board.reset();
     this.notation.clear();
